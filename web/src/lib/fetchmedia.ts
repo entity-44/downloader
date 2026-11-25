@@ -4,7 +4,7 @@ import { parseDashManifest } from "./reddit";
 import { sniffBlob } from "./sniff";
 import { UserError, type MediaItem } from "./types";
 
-const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net)$/i;
+const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net|tiktokcdn\.com|tiktokcdn-us\.com)$/i;
 
 function assertAllowed(url: string) {
   const u = new URL(url);
@@ -42,6 +42,7 @@ export type Progress = (stage: string, fraction?: number) => void;
 /** Downloads one item, merging Reddit's separate audio track when present. */
 export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url, audioUrl?: string, raw = false): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
   onProgress?.("Downloading");
+  if (item.blob) return { blob: item.blob, mergedAudio: false };
   // As-is download (e.g. a Pixiv ugoira's original frames ZIP).
   if (raw) {
     const b = await fetchFile(url);

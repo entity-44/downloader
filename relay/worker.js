@@ -12,10 +12,13 @@
  *  - /redgifs?id= RedGIFs' public API (anonymous temporary token, as their site uses)
  *  - /pixiv?id=   Pixiv's public work data (logged out; adults-only works are refused by Pixiv)
  *  - /snapchat?url= a public Snapchat page's link-preview metadata (JSON-LD / Open Graph)
+ *  - /tiktok?url=   a public TikTok video page's details (author, qualities, cover)
+ *  - /tiktok-video?url=&gear= that video's file, fetched with the same visit's cookies
+ *    (TikTok only serves the file to the visit that loaded the page)
  * It never calls Instagram's private API.
  */
 const ALLOWED_ORIGINS = new Set(["https://entity-44.github.io", "http://localhost:5173", "http://localhost:4173"]);
-const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net)$/i;
+const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net|tiktokcdn\.com|tiktokcdn-us\.com)$/i;
 const OK_TYPES = /^(image|video|audio)\/|dash\+xml|octet-stream|binary|application\/zip/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 
@@ -141,6 +144,94 @@ async function snapchat(raw, cors) {
   return json(200, { url: u.toString(), ld, og, next }, cors);
 }
 
+const TT_HOST = /^(?:www\.|m\.|vm\.|vt\.)?tiktok\.com$/i;
+
+/** Loads a public TikTok video page; returns its item data and the visit's cookies. */
+async function tiktokPage(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { error: 400 };
+  }
+  if (u.protocol !== "https:" || !TT_HOST.test(u.hostname)) return { error: 400 };
+  const jar = new Map();
+  let r;
+  for (let hop = 0; hop < 5; hop++) {
+    r = await fetch(u.toString(), {
+      redirect: "manual",
+      headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9", Cookie: [...jar].map(([k, v]) => k + "=" + v).join("; ") },
+    });
+    for (const c of r.headers.getSetCookie ? r.headers.getSetCookie() : []) {
+      const kv = c.split(";")[0];
+      const i = kv.indexOf("=");
+      if (i > 0) jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim());
+    }
+    const loc = r.headers.get("location");
+    if (r.status >= 300 && r.status < 400 && loc) {
+      u = new URL(loc, u);
+      if (!TT_HOST.test(u.hostname)) return { error: 502 };
+      continue;
+    }
+    break;
+  }
+  if (!r.ok) return { error: r.status === 404 ? 404 : 502 };
+  const html = await r.text();
+  const m = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/);
+  let item = null;
+  try {
+    item = JSON.parse(m ? m[1] : "null")?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct ?? null;
+  } catch {}
+  if (!item) return { error: 404 };
+  return { item, url: u.toString(), cookie: [...jar].map(([k, v]) => k + "=" + v).join("; ") };
+}
+
+function tiktokQualities(item) {
+  const v = item.video ?? {};
+  const out = [];
+  for (const b of v.bitrateInfo ?? []) {
+    const url = b.PlayAddr?.UrlList?.[0];
+    if (url) out.push({ gear: b.GearName, width: b.PlayAddr.Width, height: b.PlayAddr.Height, bitrate: b.Bitrate ?? 0, size: Number(b.PlayAddr.DataSize) || undefined, url });
+  }
+  if (!out.length && v.playAddr) out.push({ gear: "default", width: v.width, height: v.height, bitrate: 0, url: v.playAddr });
+  out.sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bitrate - a.bitrate);
+  return out;
+}
+
+async function tiktok(raw, cors) {
+  const p = await tiktokPage(raw);
+  if (p.error) return p.error === 400 ? text(400, "Only tiktok.com links are supported.", cors) : json(p.error, { error: p.error === 404 ? "not_found" : "upstream" }, cors);
+  const it = p.item;
+  const v = it.video ?? {};
+  return json(200, {
+    url: p.url,
+    id: it.id,
+    author: it.author?.uniqueId,
+    desc: it.desc,
+    createTime: it.createTime,
+    width: v.width,
+    height: v.height,
+    duration: v.duration,
+    cover: v.originCover || v.cover,
+    qualities: tiktokQualities(it).map(({ url, ...q }) => q),
+    images: (it.imagePost?.images ?? []).map((im) => ({ url: im.imageURL?.urlList?.[0], width: im.imageWidth, height: im.imageHeight })).filter((im) => im.url),
+  }, cors);
+}
+
+async function tiktokVideo(raw, gear, cors) {
+  const p = await tiktokPage(raw);
+  if (p.error) return text(p.error === 400 ? 400 : p.error, "Couldn't load that TikTok.", cors);
+  const qs = tiktokQualities(p.item);
+  const q = qs.find((x) => x.gear === gear) ?? qs[0];
+  if (!q) return text(404, "No video found.", cors);
+  const r = await fetch(q.url, { headers: { "User-Agent": UA, Referer: "https://www.tiktok.com/", Cookie: p.cookie, Accept: "video/*,*/*;q=0.5" } });
+  if (!r.ok) return text(r.status === 403 ? 403 : 502, "TikTok refused the video.", cors);
+  const headers = { ...cors, "content-type": "video/mp4", "cache-control": "private, max-age=600", "x-content-type-options": "nosniff" };
+  const len = r.headers.get("content-length");
+  if (len) headers["content-length"] = len;
+  return new Response(r.body, { status: 200, headers });
+}
+
 const text = (status, body, headers = {}) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", ...headers } });
 
 export default {
@@ -157,10 +248,12 @@ export default {
     if (url.pathname === "/redgifs") return redgifs(url.searchParams.get("id") ?? "", cors);
     if (url.pathname === "/pixiv") return pixiv(url.searchParams.get("id") ?? "", cors);
     if (url.pathname === "/snapchat") return snapchat(url.searchParams.get("url") ?? "", cors);
+    if (url.pathname === "/tiktok") return tiktok(url.searchParams.get("url") ?? "", cors);
+    if (url.pathname === "/tiktok-video") return tiktokVideo(url.searchParams.get("url") ?? "", url.searchParams.get("gear") ?? "", cors);
     if (url.pathname !== "/media") return text(404, "Not found", cors);
 
     let target = allowedTarget(url.searchParams.get("u") ?? "");
-    if (!target) return text(400, "Only HTTPS media from supported file servers (Instagram, Reddit, X, RedGIFs, Pixiv, Snapchat) is allowed.", cors);
+    if (!target) return text(400, "Only HTTPS media from supported file servers (Instagram, Reddit, X, RedGIFs, Pixiv, Snapchat, TikTok) is allowed.", cors);
 
     // Follow redirects manually so every hop stays on an allowed host.
     let upstream;

@@ -1,11 +1,15 @@
 import { parseInstagramHtml, parseInstagramJson, parseInstagramProfile, parseInstagramReel, parsePageJson, parseStoryData, type StoryLink } from "./instagram";
 import { parsePixiv } from "./pixiv";
+import { parseTikTok } from "./tiktok";
 import { parseRedditJson } from "./reddit";
 import { UserError, type MediaItem, type Post } from "./types";
 
 /** Data collected on the Instagram/Reddit page by the bookmark or the iOS Shortcut. */
 export type Collected = {
-  platform: "instagram" | "reddit" | "pixiv";
+  platform: "instagram" | "reddit" | "pixiv" | "tiktok";
+  /** TikTok: the video, downloaded in the TikTok tab (it only serves the file to that visit). */
+  file?: ArrayBuffer;
+  mime?: string;
   url: string;
   kind?: "post" | "reel" | "profile" | "storypage" | "screen";
   reelLabel?: string;
@@ -26,6 +30,7 @@ export function parseCollected(msg: Collected): Post {
   if (msg.error) throw new UserError(msg.error);
   if (msg.platform === "reddit") return parseRedditJson(msg.raw);
   if (msg.platform === "pixiv") return parsePixiv(msg.raw, msg.url);
+  if (msg.platform === "tiktok") return parseTikTok(msg.raw, msg.url, msg.file ? new Blob([msg.file], { type: msg.mime || "video/mp4" }) : undefined);
   if (msg.kind === "reel") return parseInstagramReel(msg.raw, msg.reelLabel ?? "stories", msg.url);
   if (msg.kind === "profile") return parseInstagramProfile(msg.raw, msg.username ?? "", msg.url);
   if (msg.kind === "storypage" || msg.kind === "screen") {
@@ -107,5 +112,5 @@ export function fromPasteLink(text: string): unknown | undefined {
 /** Recognizes text copied by the iOS Shortcut. */
 export function asCollected(json: unknown): Collected | null {
   const o = json as Collected | null;
-  return o && typeof o === "object" && o.keepsake === 1 && (o.platform === "instagram" || o.platform === "reddit" || o.platform === "pixiv" || typeof o.error === "string") ? o : null;
+  return o && typeof o === "object" && o.keepsake === 1 && (o.platform === "instagram" || o.platform === "reddit" || o.platform === "pixiv" || o.platform === "tiktok" || typeof o.error === "string") ? o : null;
 }

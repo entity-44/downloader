@@ -16,13 +16,17 @@ export type MediaItem = {
   thumbVariants?: Variant[];
   /** Pixiv ugoira: url points to a ZIP of frames, converted to MP4 on download. */
   ugoira?: { frames: Array<{ file: string; delay: number }> };
+  /** Already-downloaded file (e.g. a TikTok video fetched in the TikTok tab). */
+  blob?: Blob;
+  /** Section heading (e.g. "Stories", "Highlight: Summer") for grouped results. */
+  group?: string;
 };
 
 /** A downloadable size. audioUrl: separate audio stream to merge (DASH video-only tracks). */
 export type Variant = { url: string; width?: number; height?: number; audioUrl?: string; /** Display text (overrides the size). */ label?: string; /** Download the file as-is (e.g. ugoira frames ZIP). */ raw?: boolean };
 
 export type Post = {
-  platform: "instagram" | "reddit" | "x" | "redgifs" | "pixiv" | "snapchat";
+  platform: "instagram" | "reddit" | "x" | "redgifs" | "pixiv" | "snapchat" | "tiktok";
   id: string;
   url: string;
   author?: string;

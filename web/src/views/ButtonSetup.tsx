@@ -166,7 +166,7 @@ function Troubleshoot() {
         <li>
           <span className="font-medium text-[var(--text)]">Size tests:</span> if the test bookmark works but the real one does nothing, the real code may be getting cut off. Save each of these as a bookmark and run it on Instagram. A green box means that size works. The real bookmark is about {Math.round(bookmarkletHref(location.origin + import.meta.env.BASE_URL).length / 1000)}k characters.
           <div className="mt-2 flex flex-wrap gap-2">
-            {[2000, 4000, 6000, 9000].map((n) => (
+            {[4000, 9000, 12000, 16000, 24000].map((n) => (
               <Button key={n} size="sm" onClick={() => copy(sizeTestBookmarkletHref(n), "size" + n)}>{copied === "size" + n ? "Copied" : `Copy ${n / 1000}k test`}</Button>
             ))}
           </div>

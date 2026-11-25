@@ -79,7 +79,7 @@ const COLLECT = `
         const u = await userId(seg[0]);
         const info = u.id ? await get("/api/v1/users/" + u.id + "/info/") : null;
         if (!u.j && !info) throw new Error("Couldn't read this profile. If you're watching a story, let it start playing, then try again.");
-        msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info } });
+        toast("Reading profile…"); const stories = u.id ? await get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null; const tray = u.id ? await get("/api/v1/highlights/" + u.id + "/highlights_tray/") : null; const ids = ((tray && tray.tray) || []).slice(0, 30).map((t) => "reel_ids=" + encodeURIComponent(t.id)).join("&"); const hls = ids ? await get("/api/v1/feed/reels_media/?" + ids) : null; msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info, stories: stories, tray: tray, highlights: hls } });
       } else {
         throw new Error("Open a post, reel, story, highlight or profile first.");
       }
@@ -90,6 +90,27 @@ const COLLECT = `
       const r = await fetch("/comments/" + m[1] + ".json?raw_json=1&limit=1", { credentials: "include" });
       if (!r.ok) throw new Error("Reddit returned " + r.status + ".");
       msg = { type: "keepsake:post", platform: "reddit", url: location.href, raw: await r.json() };
+    } else if (/(^|\\.)tiktok\\.com$/.test(h)) {
+      const id = (p.match(/\\/(?:video|photo)\\/(\\d+)/) || [])[1];
+      if (!id) throw new Error("Open a TikTok video first.");
+      const pick = (t) => { try { return JSON.parse(t).__DEFAULT_SCOPE__["webapp.video-detail"].itemInfo.itemStruct; } catch (e) { return null; } };
+      const el = document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__");
+      let it = el && pick(el.textContent);
+      if (!it || it.id !== id) { const html = await (await fetch(location.href, { credentials: "include" })).text(); const mm = html.match(/__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\\s\\S]*?)<\\/script>/); it = mm && pick(mm[1]); }
+      if (!it) throw new Error("Couldn't read this TikTok. Reload the page and try again.");
+      const v = it.video || {};
+      const q = (v.bitrateInfo || []).map((b) => ({ u: b.PlayAddr && b.PlayAddr.UrlList && b.PlayAddr.UrlList[0], h: (b.PlayAddr && b.PlayAddr.Height) || 0, br: b.Bitrate || 0 })).filter((x) => x.u).sort((a, b) => b.h - a.h || b.br - a.br);
+      const meta = { id: it.id, author: it.author && it.author.uniqueId, desc: it.desc, createTime: it.createTime, width: v.width, height: v.height, duration: v.duration, cover: v.originCover || v.cover, images: ((it.imagePost && it.imagePost.images) || []).map((im) => im.imageURL && im.imageURL.urlList && im.imageURL.urlList[0]).filter(Boolean) };
+      msg = { type: "keepsake:post", platform: "tiktok", url: location.href, raw: meta };
+      if (!meta.images.length) {
+        const src = (q[0] && q[0].u) || v.playAddr;
+        if (!src) throw new Error("Couldn't find this TikTok's video.");
+        toast("Downloading video…");
+        const r = await fetch(src, { credentials: "include" });
+        if (!r.ok) throw new Error("TikTok refused the video (" + r.status + ").");
+        msg.file = await r.arrayBuffer();
+        msg.mime = "video/mp4";
+      }
     } else if (/(^|\\.)pixiv\\.net$/.test(h)) {
       const m = p.match(/\\/(?:artworks|i)\\/(\\d+)/);
       if (!m) throw new Error("Open a Pixiv work first.");
@@ -98,13 +119,13 @@ const COLLECT = `
       const illust = await g("");
       msg = { type: "keepsake:post", platform: "pixiv", url: location.href, raw: { illust: illust, ugoira: illust.illustType === 2 ? await g("/ugoira_meta") : null, pages: illust.pageCount > 1 ? await g("/pages") : null } };
     } else {
-      throw new Error("Use this button on an Instagram, Reddit or Pixiv page.");
+      throw new Error("Use this on an Instagram, Reddit, Pixiv or TikTok page.");
     }
     return msg;
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 18;
+export const CODE_VERSION = 20;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
@@ -125,7 +146,7 @@ export function bookmarkletSource(appUrl: string): string {
     const done = collect().then((m) => { msg = m; toast("Sent to Keepsake"); }, (err) => { msg = { type: "keepsake:post", platform: /reddit/.test(location.hostname) ? "reddit" : "instagram", url: location.href, error: String(err && err.message || err) }; toast("Keepsake: " + msg.error); });
     window.addEventListener("message", async (e) => {
       if (e.source !== w || e.origin !== ORIGIN || !e.data || typeof e.data.type !== "string") return;
-      if (e.data.type === "keepsake:ready") { await done; msg.v = ${CODE_VERSION}; w.postMessage(msg, ORIGIN); }
+      if (e.data.type === "keepsake:ready") { await done; msg.v = ${CODE_VERSION}; w.postMessage(msg, ORIGIN, msg.file ? [msg.file] : []); }
     });
   } catch (err) {
     toast("Keepsake: " + (err && err.message || err));
@@ -185,7 +206,7 @@ export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/
   ${TOAST}
   ${COLLECT}
   let sent = false;
-  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; const b = btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); const link = ${PASTE} + b; completion("Opening Keepsake"); let nw = null; try { nw = window.open(link, "_blank"); } catch (e) {} if (!nw) setTimeout(() => { location.href = link; }, 60); };
+  const send = (o) => { if (sent) return; sent = true; if (o.file) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([o.file], { type: o.mime })); a.download = "keepsake_tiktok_" + (o.raw && o.raw.id) + ".mp4"; document.body.appendChild(a); a.click(); toast("Saving video…"); completion("Saved"); return; } o.keepsake = 1; o.v = ${CODE_VERSION}; const DROP = ["video_dash_manifest", "edge_media_to_comment", "edge_media_preview_like", "edge_related_profiles", "edge_mutual_followed_by", "edge_felix_video_timeline", "edge_saved_media", "edge_media_collections", "comments", "preview_comments", "music_metadata", "clips_metadata", "story_music_stickers", "accessibility_caption"]; let js = JSON.stringify(o, (k, val) => DROP.indexOf(k) >= 0 ? undefined : val); if (js.length > 1500000) js = JSON.stringify({ keepsake: 1, v: o.v, error: "Too much data for the Shortcut on this page. Use the bookmark for whole profiles." }); const b = btoa(unescape(encodeURIComponent(js))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); const link = ${PASTE} + b; completion("Opening Keepsake"); let nw = null; try { nw = window.open(link, "_blank"); } catch (e) {} if (!nw) setTimeout(() => { location.href = link; }, 60); };
   const guard = setTimeout(() => send({ error: "The Keepsake script took too long on this page. Try again once the post has fully loaded." }), 8000);
   try {
     const msg = await collect();

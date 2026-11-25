@@ -259,9 +259,9 @@ type ProfileRaw = {
 
 /** Picks the largest available profile picture (usually 1080px). */
 export function parseInstagramProfile(raw: unknown, username: string, sourceUrl: string): Post {
-  const r = raw as ProfileRaw;
+  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null };
   const info = r?.info?.user;
-  const prof = r?.profile?.data?.user;
+  const prof = r?.profile?.data?.user as (NonNullable<ProfileRaw["profile"]>["data"] & { user?: { edge_owner_to_timeline_media?: { edges?: Array<{ node: GqlNode }> } } })["user"];
   const candidates: Candidate[] = [
     ...(info?.hd_profile_pic_url_info?.url ? [info.hd_profile_pic_url_info] : []),
     ...(info?.hd_profile_pic_versions ?? []),
@@ -269,15 +269,55 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
     ...(prof?.profile_pic_url ? [{ url: prof.profile_pic_url, width: 150 }] : []),
   ];
   const pic = best(candidates);
-  if (!pic) throw new UserError("Couldn't find this profile's picture.");
   const name = info?.username ?? prof?.username ?? username;
+  const items: MediaItem[] = [];
+  if (pic) items.push({ kind: "IMAGE", url: pic.url, width: pic.width, height: pic.height, group: "Profile picture" });
+
+  // Current stories.
+  const storyReel = (r?.stories as { reels?: Record<string, ReelMedia>; reels_media?: ReelMedia[] } | null | undefined);
+  const sr = (storyReel?.reels && Object.values(storyReel.reels)[0]) ?? storyReel?.reels_media?.[0];
+  for (const it of sr?.items ?? []) {
+    const m = v1Media(it);
+    if (m) items.push({ ...m, group: "Stories" });
+  }
+
+  // Highlights, in the order of the profile's highlight tray.
+  const hl = r?.highlights as { reels?: Record<string, ReelMedia>; reels_media?: ReelMedia[] } | null | undefined;
+  const reels: ReelMedia[] = hl?.reels ? Object.values(hl.reels) : (hl?.reels_media ?? []);
+  const order = (r?.tray?.tray ?? []).map((t) => t.id);
+  reels.sort((a, b) => order.indexOf(String(a.id)) - order.indexOf(String(b.id)));
+  for (const reel of reels) {
+    for (const it of reel.items ?? []) {
+      const m = v1Media(it);
+      if (m) items.push({ ...m, group: `Highlight: ${reel.title || "Untitled"}` });
+    }
+  }
+
+  // Recent posts served with the profile (carousels expanded).
+  let videoWithoutFile = 0;
+  for (const e of prof?.edge_owner_to_timeline_media?.edges ?? []) {
+    const parts = e.node.edge_sidecar_to_children?.edges?.map((c) => c.node) ?? [e.node];
+    for (const n of parts) {
+      if (n.is_video && !n.video_url) {
+        videoWithoutFile++;
+        continue;
+      }
+      const m = gqlMedia(n);
+      if (m) items.push({ ...m, group: "Posts" });
+    }
+  }
+  if (!items.length) throw new UserError("Couldn't find anything to save on this profile.");
+  const notes: string[] = [];
+  if (videoWithoutFile) notes.push(`${videoWithoutFile} post video(s) weren't included in the profile data. Open those posts to save them.`);
+  if ((prof?.edge_owner_to_timeline_media?.edges?.length ?? 0) >= 12) notes.push("Shows the most recent posts. Open older posts individually to save them.");
   return {
     platform: "instagram",
     id: `profile_${name}`,
     url: sourceUrl,
     author: name,
-    title: prof?.full_name ? `Profile picture: ${prof.full_name}` : "Profile picture",
-    items: [{ kind: "IMAGE", url: pic.url, width: pic.width, height: pic.height }],
+    title: prof?.full_name ? `${prof.full_name} (@${name})` : `@${name}`,
+    items,
+    notes: notes.length ? notes : undefined,
   };
 }
 

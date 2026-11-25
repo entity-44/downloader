@@ -5,6 +5,7 @@ import { fetchRedgifs, parseRedgifsUrl } from "./redgifs";
 import { setting } from "./router";
 import { fetchPixiv, parsePixivUrl } from "./pixiv";
 import { fetchSnapchat, parseSnapchatUrl } from "./snapchat";
+import { isTikTokUrl } from "./tiktok";
 import { fetchTweet, parseXUrl } from "./x";
 import { UserError, type Post } from "./types";
 
@@ -17,7 +18,7 @@ export class NeedsGuidedPaste extends Error {
 
 /** Thrown when a link needs the one-click button (no way to read it from this site). */
 export class NeedsButton extends Error {
-  constructor(readonly platform: "instagram" | "reddit" | "pixiv", message: string) {
+  constructor(readonly platform: "instagram" | "reddit" | "pixiv" | "tiktok", message: string) {
     super(message);
   }
 }
@@ -62,6 +63,9 @@ export async function resolveInput(input: string): Promise<Post> {
     } catch {
       throw new NeedsButton("pixiv", "Pixiv doesn't let other servers read its works, so open this work on pixiv.net and tap the Keepsake button (or run the Shortcut on iPhone). It also works for adults-only works when you're signed in.");
     }
+  }
+  if (isTikTokUrl(text)) {
+    throw new NeedsButton("tiktok", "TikTok only lets its own site download its videos, so open this video on tiktok.com and tap the Keepsake button (or run the Shortcut on iPhone).");
   }
   const sc = parseSnapchatUrl(text);
   if (sc) return fetchSnapchat(sc.url);

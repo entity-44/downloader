@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { downloadItem, fetchFile } from "../lib/fetchmedia";
 import { videoThumb } from "../lib/thumbs";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
@@ -11,7 +11,7 @@ import { Badge, Button, Notice, Spinner, cn } from "./ui";
 type ItemState = { status: "idle" | "busy" | "done" | "error"; stage?: string; progress?: number; error?: string; note?: string };
 
 const ATTEST_KEY = "attested_session";
-const PLATFORM_NAME: Record<Post["platform"], string> = { instagram: "Instagram", reddit: "Reddit", x: "X", redgifs: "RedGIFs", pixiv: "Pixiv", snapchat: "Snapchat" };
+const PLATFORM_NAME: Record<Post["platform"], string> = { instagram: "Instagram", reddit: "Reddit", x: "X", redgifs: "RedGIFs", pixiv: "Pixiv", snapchat: "Snapchat", tiktok: "TikTok" };
 
 /** Phones that can hand files to the share sheet (iPhone: "Save Image/Video" → Photos). */
 const phone = typeof navigator !== "undefined" && typeof navigator.canShare === "function" && /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -203,8 +203,15 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
           <div className={cn("grid gap-3", multi ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "mx-auto w-full grid-cols-1 sm:max-w-md")}>
             {post.items.map((it, i) => {
               const s = states[i] ?? { status: "idle" };
+              const heading = it.group && it.group !== post.items[i - 1]?.group ? (
+                <h3 className="col-span-full mt-3 text-sm font-semibold text-muted first:mt-0">
+                  {it.group} <span className="font-normal">· {post.items.filter((x) => x.group === it.group).length}</span>
+                </h3>
+              ) : null;
               return (
-                <div key={i} className="overflow-hidden rounded-xl border border-default bg-[var(--surface)]">
+                <Fragment key={i}>
+                {heading}
+                <div className="overflow-hidden rounded-xl border border-default bg-[var(--surface)]">
                   <div className={cn("relative grid place-items-center bg-[var(--surface-2)]", multi ? "aspect-square" : "min-h-48")}>
                     <Preview item={it} multi={multi} />
                     {it.kind === "VIDEO" && (
@@ -233,6 +240,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
                   {s.status === "error" && <p className="px-2.5 py-2 text-xs text-red-600 dark:text-red-400">{s.error}</p>}
                   {s.note && <p className="px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">{s.note}</p>}
                 </div>
+                </Fragment>
               );
             })}
           </div>
@@ -299,6 +307,8 @@ function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
   const cls = multi ? "size-full object-contain" : "h-auto max-h-[75vh] w-full object-contain";
   const style = !multi && item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined;
   const imageUrl = item.thumbUrl ?? (item.kind === "IMAGE" ? item.url : undefined);
+  const localUrl = useMemo(() => (item.blob ? URL.createObjectURL(item.blob) : null), [item.blob]);
+  useEffect(() => () => void (localUrl && URL.revokeObjectURL(localUrl)), [localUrl]);
   const onError = async () => {
     if (stage !== "direct") return setStage("failed");
     setStage("fallback");
@@ -308,6 +318,7 @@ function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
       setStage("failed");
     }
   };
+  if (localUrl && item.kind === "VIDEO") return <video src={localUrl} poster={item.thumbUrl} controls muted playsInline preload="metadata" className={cls} style={style} />;
   if (stage === "failed") {
     return <div className="grid size-full min-h-48 place-items-center text-muted">{item.kind === "VIDEO" ? <IconVideo className="size-8" /> : <IconImage className="size-8" />}</div>;
   }
