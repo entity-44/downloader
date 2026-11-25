@@ -52,7 +52,7 @@ const COLLECT = `
       const storyOpen = () => { const W = window.innerWidth || 0, H = window.innerHeight || 0; let open = false; document.querySelectorAll("video, img").forEach((e) => { const r = e.getBoundingClientRect ? e.getBoundingClientRect() : { width: 0, height: 0 }; if (W && H && r.width >= W * 0.6 && r.height >= H * 0.45) open = true; }); return open; };
       const story = async (label, viaApi, storyId, username) => {
         const extra = { reelLabel: label, storyId: storyId, username: username };
-        const found = onPage(storyId || "");
+        const found = storyId ? onPage(storyId) : [];
         if (found.length) return Object.assign(base, extra, { kind: "storypage", pageJson: found });
         let raw = null;
         try { raw = await viaApi(); } catch (e) { if (e && e.message === SPAM) throw e; }

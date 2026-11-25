@@ -348,8 +348,9 @@ export function parseStoryData(json: unknown, link: StoryLink): Post {
   };
   // Prefer the tray belonging to the person in the link (pages can include other people's stories).
   const tray =
-    (link.username && deepFind(json, (o): o is ReelMedia => isTray(o) && (o as ReelMedia).user?.username?.toLowerCase() === link.username!.toLowerCase())) ||
-    deepFind(json, isTray);
+    link.username
+      ? deepFind(json, (o): o is ReelMedia => isTray(o) && (o as ReelMedia).user?.username?.toLowerCase() === link.username!.toLowerCase())
+      : deepFind(json, isTray); // never fall back to someone else's stories
   if (tray?.items?.length) {
     const label = link.kind === "highlight" ? `highlight_${link.highlightId}` : `stories_${link.username}`;
     return parseInstagramReel({ reels_media: [tray] }, label, link.canonicalUrl);

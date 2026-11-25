@@ -513,11 +513,12 @@ describe("stories: page data, then request, then on-screen fallback", () => {
 
   it("uses story data already in the page first, with no requests", async () => {
     const tray = JSON.stringify({ reels_media: [{ user: { username: "other" }, items: [{ pk: "9", image_versions2: { candidates: [{ url: `${CDN}/other.jpg`, width: 1080 }] } }] }, { user: { username: "someone" }, items: [{ pk: "1", image_versions2: { candidates: [{ url: `${CDN}/mine.jpg`, width: 1080 }] } }] }] });
-    const r = await runWith("/stories/someone/", { scripts: [tray] });
+    // With a story number in the address, page data is used with no requests.
+    const r = await runWith("/stories/someone/1/", { scripts: [tray] });
     expect(r.calls).toEqual([]);
     const { parseCollected } = await import("../src/lib/incoming");
     const post = parseCollected(r.posted as never);
-    expect(post.items[0].url).toBe(`${CDN}/mine.jpg`); // the right person's stories, not someone else's
+    expect(post.items[0].url).toBe(`${CDN}/mine.jpg`); // the exact story by its number
   });
 
   it("explains clearly when nothing can be found", async () => {
@@ -751,5 +752,13 @@ describe("never the wrong video", () => {
       Object.assign(g, saved);
     }
     expect(JSON.parse(out).media).toEqual([{ kind: "VIDEO", url: `${CDN}/current.mp4`, width: 720, height: 1280 }]);
+  });
+});
+
+describe("stories without a number in the address", () => {
+  it("never takes another person's story set from the page", async () => {
+    const { parseStoryData } = await import("../src/lib/instagram");
+    const others = { reels_media: [{ user: { username: "someone_else" }, items: [{ pk: "9", image_versions2: { candidates: [{ url: `${CDN}/wrong.jpg`, width: 1080 }] } }] }] };
+    expect(() => parseStoryData(others, { kind: "story", username: "someone", canonicalUrl: "" })).toThrow(/didn't include/);
   });
 });
