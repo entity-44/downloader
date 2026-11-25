@@ -14,10 +14,11 @@ export function PasteView() {
   const load = (text: string) => {
     setError(null);
     let json: unknown;
+    const peek = text.trim() ? ` The clipboard had ${text.length} characters, starting with: “${text.trim().slice(0, 80)}”` : " The clipboard was empty.";
     try {
       json = JSON.parse(text.trim());
     } catch {
-      return setError("The clipboard doesn't contain post data from the Keepsake Shortcut. Run the Shortcut from Safari's Share menu on the post, then come back.");
+      return setError("The clipboard doesn't contain post data from the Keepsake Shortcut." + peek);
     }
     const c = asCollected(json);
     if (!c) return setError("The clipboard doesn't contain post data from the Keepsake Shortcut.");

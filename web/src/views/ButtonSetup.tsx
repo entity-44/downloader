@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { IconCheck, IconClipboard, IconLink } from "../components/icons";
 import { Badge, Button, Card, Notice, PageHeader, SectionTitle, cn } from "../components/ui";
-import { bookmarkletHref, shortcutSource } from "../lib/bookmarklet";
+import { bookmarkletHref, shortcutSource, testBookmarkletHref, testShortcutSource } from "../lib/bookmarklet";
 
 const TABS = ["Computer", "iPhone / iPad", "Android"] as const;
 
@@ -84,6 +84,7 @@ export function ButtonSetup() {
           </ul>
         </Card>
       </div>
+      <Troubleshoot />
       <Notice tone="info">Only save media you own or have permission to keep.</Notice>
     </div>
   );
@@ -145,5 +146,29 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
       </details>
       <p className="text-xs text-muted">Both work in Safari, not inside the Instagram app. From the app: Share → Copy link, then open the link in Safari.</p>
     </div>
+  );
+}
+
+function Troubleshoot() {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = async (value: string, key: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2500);
+  };
+  return (
+    <Card>
+      <SectionTitle title="Troubleshooting" description="If the button or Shortcut does nothing, these tiny tests show whether code can run on the Instagram page at all." />
+      <ol className="space-y-3 text-sm text-muted">
+        <li>
+          <span className="font-medium text-[var(--text)]">Test bookmark:</span> copy it, save it as a second bookmark (same steps as the real one), then open an Instagram post in Safari and run it from the Bookmarks list. You should see a dark box saying “Keepsake test OK”.
+          <div className="mt-2"><Button size="sm" onClick={() => copy(testBookmarkletHref(), "bm")}>{copied === "bm" ? "Copied" : "Copy test bookmark"}</Button></div>
+        </li>
+        <li>
+          <span className="font-medium text-[var(--text)]">Test Shortcut code:</span> paste it into your Shortcut instead of the real code, run it from Safari’s Share menu on a post, then tap “Paste from Keepsake”. It shows “TEST OK” and what it found.
+          <div className="mt-2"><Button size="sm" onClick={() => copy(testShortcutSource(), "sc")}>{copied === "sc" ? "Copied" : "Copy test Shortcut code"}</Button></div>
+        </li>
+      </ol>
+    </Card>
   );
 }

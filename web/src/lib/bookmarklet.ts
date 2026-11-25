@@ -131,8 +131,28 @@ export function bookmarkletSource(appUrl: string): string {
 })();`);
 }
 
+/**
+ * Minimal escaping keeps the link short (long pasted bookmarks can be cut off
+ * on iPhone): only "%" (so nothing gets decoded twice) and "#" (fragment marker).
+ */
+export const lightEncode = (code: string) => code.replace(/%/g, "%25").replace(/#/g, "%23");
+
 export function bookmarkletHref(appUrl: string) {
-  return `javascript:${encodeURIComponent(bookmarkletSource(appUrl))}`;
+  return `javascript:${lightEncode(bookmarkletSource(appUrl))}`;
+}
+
+/** Tiny bookmark that only shows a message on the page: proves bookmarks can run there. */
+export function testBookmarkletHref() {
+  const code =
+    "(function(){var d=document.createElement('div');d.style.cssText='position:fixed;z-index:2147483647;top:20px;left:10px;right:10px;background:#111;color:#fff;padding:14px;border-radius:12px;font:15px -apple-system,system-ui,sans-serif';" +
+    "d.textContent='Keepsake test OK on '+location.hostname+location.pathname+' | data blocks: '+document.querySelectorAll('script[type=\"application/json\"]').length;" +
+    "document.body.appendChild(d);setTimeout(function(){d.remove()},10000)})()";
+  return `javascript:${lightEncode(code)}`;
+}
+
+/** Tiny Shortcut code that reports what it sees; the paste page shows the report. */
+export function testShortcutSource() {
+  return ";completion(JSON.stringify({keepsake:1,error:'TEST OK. Page: '+location.hostname+location.pathname+' | data blocks: '+document.querySelectorAll('script[type=\"application/json\"]').length}));";
 }
 
 /** Code for the iOS Shortcut "Run JavaScript on Web Page" action. */
