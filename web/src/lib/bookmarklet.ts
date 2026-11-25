@@ -88,13 +88,14 @@ export function bookmarkletSource(appUrl: string): string {
   ${TOAST}
   ${COLLECT}
   try {
-    const msg = await collect();
     const w = window.open(APP + "#/receive", "_blank");
-    if (!w) throw new Error("Pop-up blocked. Allow pop-ups for this site and try again.");
-    toast("Sent to Keepsake");
+    if (!w) throw new Error("Pop-up blocked. Turn off Settings > Apps > Safari > Block Pop-ups, then try again.");
+    toast("Reading…");
+    let msg = null;
+    const done = collect().then((m) => { msg = m; toast("Sent to Keepsake"); }, (err) => { msg = { type: "keepsake:post", platform: /reddit/.test(location.hostname) ? "reddit" : "instagram", url: location.href, error: String(err && err.message || err) }; toast("Keepsake: " + msg.error); });
     window.addEventListener("message", async (e) => {
       if (e.source !== w || e.origin !== ORIGIN || !e.data || typeof e.data.type !== "string") return;
-      if (e.data.type === "keepsake:ready") w.postMessage(msg, ORIGIN);
+      if (e.data.type === "keepsake:ready") { await done; w.postMessage(msg, ORIGIN); }
       if (e.data.type === "keepsake:fetch") {
         try {
           const u = new URL(e.data.url);

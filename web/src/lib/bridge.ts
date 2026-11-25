@@ -15,7 +15,7 @@ export const TRUSTED_ORIGINS = new Set([
 ]);
 
 export type Incoming =
-  | { type: "keepsake:post"; platform: "instagram" | "reddit"; url: string; kind?: "post" | "reel" | "profile"; reelLabel?: string; pageJson?: string[]; username?: string; raw?: unknown; html?: string; shortcode?: string }
+  | { type: "keepsake:post"; platform: "instagram" | "reddit"; url: string; kind?: "post" | "reel" | "profile" | "storypage" | "screen"; reelLabel?: string; pageJson?: string[]; storyId?: string; media?: unknown[]; error?: string; username?: string; raw?: unknown; html?: string; shortcode?: string }
   | { type: "keepsake:file"; reqId: string; buffer: ArrayBuffer; mime: string }
   | { type: "keepsake:file-error"; reqId: string; error: string };
 
@@ -26,7 +26,7 @@ export function isTrustedMessage(e: MessageEvent, opener: Window | null): boolea
 }
 
 /** Waits for the bookmarklet to send post data. */
-export function receivePost(timeoutMs = 15_000): Promise<Extract<Incoming, { type: "keepsake:post" }>> {
+export function receivePost(timeoutMs = 45_000): Promise<Extract<Incoming, { type: "keepsake:post" }>> {
   return new Promise((resolve, reject) => {
     const opener = window.opener as Window | null;
     if (!opener) return reject(new Error("no-opener"));

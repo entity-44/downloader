@@ -11,6 +11,22 @@ type ItemState = { status: "idle" | "busy" | "done" | "error"; stage?: string; p
 
 const ATTEST_KEY = "attested_session";
 
+/** Phones that can hand files to the share sheet (iPhone: "Save Image/Video" → Photos). */
+const phone = typeof navigator !== "undefined" && typeof navigator.canShare === "function" && /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+async function shareFiles(files: Array<{ name: string; blob: Blob }>) {
+  const asFiles = files.map((f) => new File([f.blob], f.name, { type: f.blob.type || "application/octet-stream" }));
+  try {
+    if (navigator.canShare({ files: asFiles })) {
+      await navigator.share({ files: asFiles });
+      return;
+    }
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") return; // user closed the share sheet
+  }
+  for (const f of files) saveBlob(f.blob, f.name);
+}
+
 /**
  * One-time result: preview, download (single file or ZIP), then start over.
  * Downloaded files are held only until the page is left or reset.
@@ -30,6 +46,8 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
     return v?.width && v.height ? `_${v.width}x${v.height}` : v?.height ? `_${v.height}p` : "";
   };
   const [zipping, setZipping] = useState(false);
+  const [readyFiles, setReadyFiles] = useState<Array<{ name: string; blob: Blob }> | null>(null);
+  const zipName = `${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`;
   const [error, setError] = useState<string | null>(null);
 
   const ext = (b: Blob, item: MediaItem) => b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg");
@@ -55,7 +73,10 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
   async function downloadOne(i: number) {
     try {
       const b = await get(i);
-      saveBlob(b, name(i, b));
+      // Phones: the share sheet ("Save Image/Video" → Photos) needs a fresh tap,
+      // so prepare the file here and show Save buttons for the next tap.
+      if (phone) setReadyFiles([{ name: name(i, b), blob: b }]);
+      else saveBlob(b, name(i, b));
     } catch {
       /* shown on the item */
     }
@@ -75,7 +96,8 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
         }
       }
       if (!files.length) throw new UserError("None of the files could be downloaded.");
-      await zipAndSave(files, `${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`);
+      if (phone) setReadyFiles(files);
+      else await zipAndSave(files, zipName);
     } catch (e) {
       setError(e instanceof UserError ? e.message : "Couldn't create the ZIP.");
     } finally {
@@ -196,7 +218,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {multi ? (
               <Button variant="primary" size="lg" disabled={!attested || busy} loading={zipping} onClick={downloadAll}>
-                {!zipping && <IconDownload className="size-5" />} Download all ({post.items.length}) as ZIP
+                {!zipping && <IconDownload className="size-5" />} {phone ? `Download all (${post.items.length})` : `Download all (${post.items.length}) as ZIP`}
               </Button>
             ) : (
               <Button variant="primary" size="lg" disabled={!attested || busy} loading={states[0]?.status === "busy"} onClick={() => downloadOne(0)}>
@@ -215,6 +237,20 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
               </Button>
             )}
           </div>
+          {phone && readyFiles && (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 animate-fade-up">
+              <p className="text-sm font-medium">{readyFiles.length === 1 ? "Ready to save" : `${readyFiles.length} files ready to save`}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="primary" onClick={() => shareFiles(readyFiles)}>
+                  <IconDownload className="size-4" /> Save to Photos
+                </Button>
+                <Button onClick={() => (readyFiles.length === 1 ? saveBlob(readyFiles[0].blob, readyFiles[0].name) : zipAndSave(readyFiles, zipName))}>
+                  {readyFiles.length === 1 ? "Save to Files" : "Save as ZIP to Files"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted">“Save to Photos” opens the share sheet. Choose “Save Image” or “Save Video”.</p>
+            </div>
+          )}
           {error && <div className="mt-4"><Notice tone="error">{error}</Notice></div>}
         </>
       )}

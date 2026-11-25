@@ -235,7 +235,9 @@ describe("bookmarklet page detection", () => {
     const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
     g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
     g.document = { cookie: "csrftoken=abc123", querySelectorAll: () => pageScripts.map((t) => ({ textContent: t })), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
-    g.window = { open: (u: string) => ((opened = u), { postMessage() {} }), addEventListener() {} };
+    const win = { postMessage() {} };
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    g.window = { open: (u: string) => ((opened = u), win), addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
     g.fetch = async (u: string, init?: { headers?: Record<string, string> }) => {
       calls.push(u);
       headers.push(init?.headers ?? {});
@@ -244,6 +246,7 @@ describe("bookmarklet page detection", () => {
     };
     try {
       await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
     } finally {
       Object.assign(g, saved);
     }
@@ -274,7 +277,7 @@ describe("bookmarklet page detection", () => {
   it("refuses non-content pages", async () => {
     const r = await run("/explore/");
     expect(r.calls).toEqual([]);
-    expect(r.opened).toBeNull();
+    expect(r.calls).toEqual([]);
     expect(r.toast).toMatch(/Open a post, reel, story, highlight or profile/);
   });
 });
@@ -289,7 +292,9 @@ describe("avoiding Instagram's spam flag", () => {
     const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
     g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
     g.document = { cookie: "csrftoken=abc123; other=1", querySelectorAll: () => pageScripts.map((t) => ({ textContent: t })), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
-    g.window = { open: (u: string) => ((opened = u), { postMessage() {} }), addEventListener() {} };
+    const win = { postMessage() {} };
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    g.window = { open: (u: string) => ((opened = u), win), addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
     g.fetch = async (u: string, init?: { headers?: Record<string, string> }) => {
       calls.push(u);
       headers.push(init?.headers ?? {});
@@ -298,6 +303,7 @@ describe("avoiding Instagram's spam flag", () => {
     };
     try {
       await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
     } finally {
       Object.assign(g, saved);
     }
@@ -321,7 +327,6 @@ describe("avoiding Instagram's spam flag", () => {
   it("stops immediately (no retry, no tab) when Instagram answers spam:true", async () => {
     const r = await runPage("/stories/highlights/1790/", { reels_media: { message: "", spam: true, status: "fail" } });
     expect(r.calls).toHaveLength(1);
-    expect(r.opened).toBeNull();
     expect(r.toast).toMatch(/flagged that request as automated/);
   });
 
@@ -515,7 +520,27 @@ describe("stories: page data, then request, then on-screen fallback", () => {
 
   it("explains clearly when nothing can be found", async () => {
     const r = await runWith("/stories/someone/", { imgs: [avatar] });
-    expect(r.opened).toBeNull();
+    expect(r.posted).toMatchObject({ error: expect.stringMatching(/Let it start playing/) });
     expect(r.toast).toMatch(/Let it start playing/);
+  });
+});
+
+describe("iPhone pop-up rule", () => {
+  it("opens the Keepsake tab before reading anything (while the tap still counts)", async () => {
+    const order: string[] = [];
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    g.location = { hostname: "www.instagram.com", pathname: "/p/CxYz123AbC/", href: "https://www.instagram.com/p/CxYz123AbC/" };
+    g.document = { cookie: "", querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
+    g.window = { open: () => (order.push("open"), { postMessage() {} }), addEventListener() {} };
+    g.fetch = async () => (order.push("fetch"), new Response("{}", { status: 404 }));
+    try {
+      await new Function(bookmarkletSource("https://entity-44.github.io/downloader/"))();
+      await new Promise((r) => setTimeout(r, 10));
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(order[0]).toBe("open");
   });
 });

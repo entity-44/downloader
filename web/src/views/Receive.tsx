@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { PostResult } from "../components/PostResult";
 import { Notice, Spinner } from "../components/ui";
 import { receivePost } from "../lib/bridge";
-import { parseCollected } from "../lib/incoming";
+import { parseCollected, type Collected } from "../lib/incoming";
 import { UserError, type Post } from "../lib/types";
 
 /** Landing page opened by the bookmarklet. */
@@ -15,7 +15,7 @@ export function Receive() {
     receivePost()
       .then((msg) => {
         if (cancelled) return;
-        setPost(parseCollected(msg));
+        setPost(parseCollected(msg as Collected));
       })
       .catch((e: Error) => {
         if (cancelled) return;
