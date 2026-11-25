@@ -1,0 +1,151 @@
+// Prisma schema — SQLite. String columns that hold enumerations are validated
+// in application code (see src/lib/types.ts) to stay portable across databases.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settings     Settings?
+  sessions     Session[]
+  connections  InstagramConnection[]
+  oauthStates  OAuthState[]
+  downloads    Download[]
+  archives     ArchiveImport[]
+  mediaFiles   MediaFile[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  csrfToken  String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Settings {
+  userId         String  @id
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme          String  @default("system") // system | light | dark
+  maxDownloadMb  Int     @default(500)
+  retentionHours Int     @default(72)
+  autoCleanup    Boolean @default(true)
+}
+
+// A connected Instagram professional account (Instagram API with Instagram Login).
+model InstagramConnection {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  igUserId        String
+  username        String
+  accountType     String?
+  accessTokenEnc  String // AES-256-GCM encrypted long-lived token
+  tokenExpiresAt  DateTime?
+  tokenRefreshedAt DateTime @default(now())
+  scopes          String    @default("")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, igUserId])
+}
+
+model OAuthState {
+  state     String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+}
+
+// One entry in download history: a URL request or a set of user-provided files.
+model Download {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceUrl    String?
+  shortcode    String?
+  urlKind      String? // post | reel | tv
+  source       String // CONNECTED_ACCOUNT | USER_UPLOAD
+  mediaType    String? // IMAGE | VIDEO | CAROUSEL | REEL
+  status       String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | EXPIRED
+  errorCode    String?
+  errorMessage String?
+  caption      String?
+  ownerUsername String?
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+  expiresAt    DateTime?
+
+  files        MediaFile[]
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model ArchiveImport {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalName     String
+  sizeBytes        BigInt
+  status           String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED
+  totalEntries     Int       @default(0)
+  processedEntries Int       @default(0)
+  fileCount        Int       @default(0)
+  skippedCount     Int       @default(0)
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  files            MediaFile[]
+
+  @@index([userId, createdAt])
+}
+
+model MediaFile {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  downloadId  String?
+  download    Download?      @relation(fields: [downloadId], references: [id], onDelete: Cascade)
+  archiveId   String?
+  archive     ArchiveImport? @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  kind        String // IMAGE | VIDEO
+  mimeType    String
+  sizeBytes   BigInt
+  storagePath String // relative to STORAGE_DIR; never exposed to clients
+  thumbPath   String?
+  filename    String // suggested download filename
+  category    String? // post | reel | story | profile | message | igtv | archived | other
+  caption     String?
+  takenAt     DateTime?
+  position    Int            @default(0)
+  width       Int?
+  height      Int?
+  durationSec Float?
+  createdAt   DateTime       @default(now())
+
+  @@index([userId])
+  @@index([archiveId, takenAt])
+  @@index([downloadId])
+}

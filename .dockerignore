@@ -1,0 +1,12 @@
+node_modules
+.next
+data
+.env
+.env.*
+!.env.example
+src/generated
+coverage
+tests
+*.md
+!README.md
+.git
