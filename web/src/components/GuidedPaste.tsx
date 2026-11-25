@@ -73,7 +73,7 @@ export function GuidedPaste({ link, onPost }: { link: IgLink | StoryLink; onPost
       </div>
 
       {iphone ? (
-        <p className="text-sm text-muted">iPhone and iPad browsers can’t show a page’s source, so the manual steps don’t work there. Use the button above.</p>
+        <p className="text-sm text-muted">iPhone Safari can’t show a page’s source, so the manual steps don’t work there. Use the <a href="#/button" className="underline underline-offset-4">Share-menu Shortcut</a> instead: open it in Safari → Share → Save with Keepsake.</p>
       ) : (
         <>
           <p className="text-sm font-medium">Or do it by hand{phone ? " (Chrome on Android)" : ""}:</p>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { IconCheck, IconClipboard, IconLink } from "../components/icons";
 import { Badge, Button, Card, Notice, PageHeader, SectionTitle, cn } from "../components/ui";
-import { bookmarkletHref } from "../lib/bookmarklet";
+import { bookmarkletHref, shortcutSource } from "../lib/bookmarklet";
 
 const TABS = ["Computer", "iPhone / iPad", "Android"] as const;
 
@@ -52,15 +52,7 @@ export function ButtonSetup() {
             "This page opens with the post ready to save. Allow pop-ups for instagram.com / reddit.com if asked.",
           ]} />
         )}
-        {tab === "iPhone / iPad" && (
-          <Steps steps={[
-            "Tap “Copy button code” above.",
-            "In Safari, bookmark any page: tap Share → Add Bookmark → Save.",
-            "Open Bookmarks, tap Edit, select the new bookmark, rename it “Save to Keepsake”, and replace its address with the copied code. Tap Done.",
-            "Open a post on instagram.com or reddit.com in Safari (not the apps). Tap the address bar, type “Save to Keepsake” and tap the bookmark when it appears, or open it from Bookmarks.",
-            "Tip: in the Instagram or Reddit app, use Share → Copy link, then open the link in Safari first.",
-          ]} />
-        )}
+        {tab === "iPhone / iPad" && <IosShortcut appUrl={appUrl} />}
         {tab === "Android" && (
           <Steps steps={[
             "Tap “Copy button code” above.",
@@ -107,5 +99,48 @@ function Steps({ steps }: { steps: string[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function IosShortcut({ appUrl }: { appUrl: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const pasteUrl = `${appUrl}#/paste`;
+  const copy = async (value: string, key: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2500);
+  };
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+        <p className="font-medium">Recommended on iPhone: a Share-menu Shortcut</p>
+        <p className="mt-1 text-muted">Once set up: open the post, story or highlight in Safari → <span className="font-medium text-[var(--text)]">Share → Save with Keepsake</span> → tap “Paste from Keepsake”. It reads the page inside your signed-in Safari, like the button.</p>
+      </div>
+      <Steps steps={[
+        "Open the Shortcuts app and tap + to create a new shortcut. Name it “Save with Keepsake”.",
+        "Tap the ⓘ (or settings) button, turn on “Show in Share Sheet”, and under Share Sheet Types keep only “Safari web pages”.",
+        "Add the action “Run JavaScript on Web Page”. Tap “Copy Shortcut code” below, then replace all the code in that action with it.",
+        "Add the action “Copy to Clipboard” (it uses the JavaScript result).",
+        "Add the action “Open URLs” and set the URL to the page address below (tap “Copy page address”).",
+        "Use it: in Safari, open the post, story or highlight → Share → Save with Keepsake. The first time, allow it to run on instagram.com. Your site opens. Tap “Paste from Keepsake”.",
+      ]} />
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => copy(shortcutSource(), "code")}>{copied === "code" ? <IconCheck className="size-4" /> : <IconClipboard className="size-4" />} {copied === "code" ? "Copied" : "Copy Shortcut code"}</Button>
+        <Button onClick={() => copy(pasteUrl, "url")}>{copied === "url" ? <IconCheck className="size-4 text-emerald-500" /> : <IconLink className="size-4" />} {copied === "url" ? "Copied" : "Copy page address"}</Button>
+      </div>
+      <p className="break-all font-mono text-xs text-muted">{pasteUrl}</p>
+      <details className="text-sm text-muted">
+        <summary className="cursor-pointer">Prefer a bookmark instead?</summary>
+        <div className="mt-3">
+          <Steps steps={[
+            "Tap “Copy button code” at the top of this page.",
+            "In Safari, bookmark any page: Share → Add Bookmark → Save.",
+            "Open Bookmarks → Edit, select the new bookmark, rename it “Save to Keepsake”, and replace its address with the copied code.",
+            "On a post in Safari, tap the address bar, type “Save to Keepsake” and tap the bookmark.",
+          ]} />
+        </div>
+      </details>
+      <p className="text-xs text-muted">Both work in Safari, not inside the Instagram app. From the app: Share → Copy link, then open the link in Safari.</p>
+    </div>
   );
 }

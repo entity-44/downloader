@@ -1,22 +1,21 @@
 /**
- * Source of the one-click bookmarklet. It runs on the Instagram/Reddit post
- * you're viewing, reads that post's data using the page's own (same-origin)
- * access, opens this app, and hands the data over via postMessage.
+ * Code that runs on the Instagram/Reddit post you are viewing, in your own
+ * signed-in browser. It reads only that post (preferring data already on the
+ * page; otherwise one request with Instagram's own web headers) and stops on
+ * Instagram's spam flag. It sends raw data only: parsing lives in the app, so
+ * format changes are fixed by updating the site.
  *
- * It sends raw data only: parsing lives in the app so format changes can be
- * fixed by updating the site, without reinstalling the bookmark.
+ * Two delivery wrappers share the same collector:
+ *  - bookmarklet: opens the app and hands the data over via postMessage
+ *  - iOS Shortcut ("Run JavaScript on Web Page"): returns the data, which the
+ *    Shortcut copies to the clipboard before opening the app
  */
-export function bookmarkletSource(appUrl: string): string {
-  const app = new URL(appUrl);
-  const APP = JSON.stringify(app.origin + app.pathname);
-  const ORIGIN = JSON.stringify(app.origin);
-  const code = `
-(async () => {
-  const APP = ${APP}, ORIGIN = ${ORIGIN};
-  const toast = (m) => { let d = document.getElementById("__keepsake_toast"); if (!d) { d = document.createElement("div"); d.id = "__keepsake_toast"; d.style.cssText = "position:fixed;z-index:2147483647;top:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font:14px system-ui,sans-serif;padding:10px 16px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);max-width:90vw"; document.body.appendChild(d); } d.textContent = m; clearTimeout(d._t); d._t = setTimeout(() => d.remove(), 6000); };
+const TOAST = "const toast = (m) => { let d = document.getElementById(\"__keepsake_toast\"); if (!d) { d = document.createElement(\"div\"); d.id = \"__keepsake_toast\"; d.style.cssText = \"position:fixed;z-index:2147483647;top:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font:14px system-ui,sans-serif;padding:10px 16px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);max-width:90vw\"; document.body.appendChild(d); } d.textContent = m; clearTimeout(d._t); d._t = setTimeout(() => d.remove(), 6000); };";
+
+const COLLECT = `
   const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
   const sc2id = (s) => { let n = 0n; for (const c of s.slice(0, 11)) n = n * 64n + BigInt(A.indexOf(c)); return n.toString(); };
-  try {
+  const collect = async () => {
     const h = location.hostname, p = location.pathname;
     let msg;
     if (/(^|\\.)instagram\\.com$/.test(h)) {
@@ -66,6 +65,22 @@ export function bookmarkletSource(appUrl: string): string {
     } else {
       throw new Error("Use this button on an Instagram or Reddit post.");
     }
+    return msg;
+  };`;
+
+const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
+
+export function bookmarkletSource(appUrl: string): string {
+  const app = new URL(appUrl);
+  const APP = JSON.stringify(app.origin + app.pathname);
+  const ORIGIN = JSON.stringify(app.origin);
+  return oneLine(`
+(async () => {
+  const APP = ${APP}, ORIGIN = ${ORIGIN};
+  ${TOAST}
+  ${COLLECT}
+  try {
+    const msg = await collect();
     const w = window.open(APP + "#/receive", "_blank");
     if (!w) throw new Error("Pop-up blocked. Allow pop-ups for this site and try again.");
     toast("Sent to Keepsake");
@@ -88,14 +103,26 @@ export function bookmarkletSource(appUrl: string): string {
   } catch (err) {
     toast("Keepsake: " + (err && err.message || err));
   }
-})();`;
-  return code
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join(" ");
+})();`);
 }
 
 export function bookmarkletHref(appUrl: string) {
   return `javascript:${encodeURIComponent(bookmarkletSource(appUrl))}`;
+}
+
+/** Code for the iOS Shortcut "Run JavaScript on Web Page" action. */
+export function shortcutSource(): string {
+  return oneLine(`
+(async () => {
+  ${TOAST}
+  ${COLLECT}
+  try {
+    const msg = await collect();
+    msg.keepsake = 1;
+    toast("Copied for Keepsake");
+    completion(JSON.stringify(msg));
+  } catch (err) {
+    completion(JSON.stringify({ keepsake: 1, error: String(err && err.message || err) }));
+  }
+})();`);
 }

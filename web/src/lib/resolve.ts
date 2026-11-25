@@ -1,5 +1,6 @@
 import { parseInstagramHtml, parseInstagramJson, parseInstagramUrl, parseStoryData, parseStoryUrl, type IgLink, type StoryLink } from "./instagram";
 import { fetchRedditPost, parseRedditJson, parseRedditUrl, resolveVreddit } from "./reddit";
+import { asCollected, parseCollected } from "./incoming";
 import { setting } from "./router";
 import { UserError, type Post } from "./types";
 
@@ -29,6 +30,8 @@ export async function resolveInput(input: string): Promise<Post> {
     } catch {
       throw new UserError("That looks like JSON but couldn't be read. Make sure you copied all of it.");
     }
+    const collected = asCollected(json);
+    if (collected) return parseCollected(collected);
     try {
       return parseRedditJson(json);
     } catch {

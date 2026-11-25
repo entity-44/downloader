@@ -6,6 +6,7 @@ import { applyTheme, getTheme, useRoute } from "./lib/router";
 import { ButtonSetup } from "./views/ButtonSetup";
 import { Home } from "./views/Home";
 import { ImportView } from "./views/ImportView";
+import { PasteView } from "./views/PasteView";
 import { Receive } from "./views/Receive";
 import { Settings } from "./views/Settings";
 
@@ -62,10 +63,11 @@ export function App() {
   const route = useRoute();
   const [fbConnected] = useState(() => consumeFacebookRedirect());
   const top = route[0] ?? "";
-  const active = (p: string) => (p === "" ? top === "" || top === "receive" : top === p);
+  const active = (p: string) => (p === "" ? top === "" || top === "receive" || top === "paste" : top === p);
 
   let view: React.ReactNode;
   if (top === "receive") view = <Receive />;
+  else if (top === "paste") view = <PasteView />;
   else if (top === "import") view = <ImportView />;
   else if (top === "button") view = <ButtonSetup />;
   else if (top === "settings") view = <Settings justConnected={fbConnected} />;

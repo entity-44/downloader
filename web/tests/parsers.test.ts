@@ -367,3 +367,58 @@ describe("pasted story and highlight links", () => {
     expect(() => parsePastedInstagram(page({ nothing: true }), hl)).toThrow(/didn't include the story's media/);
   });
 });
+
+describe("iOS Shortcut", () => {
+  async function runShortcut(pathname: string, pageScripts: string[] = [], responses: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    let result: string | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" } as unknown as HTMLElement;
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, fetch: g.fetch, completion: g.completion };
+    g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
+    g.document = { cookie: "", querySelectorAll: () => pageScripts.map((t) => ({ textContent: t })), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
+    g.fetch = async (u: string) => {
+      calls.push(u);
+      const key = Object.keys(responses).find((k) => u.includes(k));
+      return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
+    };
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = (r: string) => {
+          result = r;
+          resolve();
+        };
+        new Function(shortcutSource())();
+      });
+    } finally {
+      Object.assign(g, saved);
+    }
+    return { calls, result: JSON.parse(result!) };
+  }
+
+  it("returns page data the site can parse, without sending requests", async () => {
+    const embedded = JSON.stringify({ items: [{ code: "CxYz123AbC", media_type: 1, user: { username: "me" }, image_versions2: { candidates: [{ url: `${CDN}/a.jpg`, width: 1080 }] } }] });
+    const { calls, result } = await runShortcut("/p/CxYz123AbC/", [embedded]);
+    expect(calls).toEqual([]);
+    expect(result).toMatchObject({ keepsake: 1, platform: "instagram", kind: "post", shortcode: "CxYz123AbC" });
+    const { resolveInput } = await import("../src/lib/resolve");
+    const post = await resolveInput(JSON.stringify(result));
+    expect(post.items[0].url).toBe(`${CDN}/a.jpg`);
+  });
+
+  it("returns readable errors (e.g. spam flag) instead of failing silently", async () => {
+    const { result } = await runShortcut("/stories/highlights/1790/", [], { reels_media: { spam: true, status: "fail" } });
+    expect(result.error).toMatch(/flagged that request as automated/);
+    const { resolveInput } = await import("../src/lib/resolve");
+    await expect(resolveInput(JSON.stringify(result))).rejects.toThrow(/flagged/);
+  });
+
+  it("is valid single-line code with no app-specific secrets", async () => {
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    const src = shortcutSource();
+    expect(src).not.toContain("\n");
+    expect(() => new Function(src)).not.toThrow();
+    expect(src).toContain("completion(");
+  });
+});
