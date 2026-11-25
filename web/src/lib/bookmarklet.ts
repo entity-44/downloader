@@ -32,20 +32,28 @@ const COLLECT = `
       const seg = p.split("/").filter(Boolean);
       const RES = ["explore", "accounts", "direct", "reels", "stories", "p", "reel", "tv", "about", "legal", "web", "challenge", "emails", "settings", "your_activity", "notifications"];
       toast("Reading…");
+      const onScreen = () => { const out = []; document.querySelectorAll("video").forEach((v) => { const s = v.currentSrc || v.src || ""; const r = v.getBoundingClientRect ? v.getBoundingClientRect() : { width: 999 }; if (/^https:/.test(s) && r.width > 150) out.push({ kind: "VIDEO", url: s, width: v.videoWidth || undefined, height: v.videoHeight || undefined, thumbUrl: v.poster || undefined }); }); document.querySelectorAll("img").forEach((i) => { const r = i.getBoundingClientRect ? i.getBoundingClientRect() : { width: 999, height: 999 }; if (r.width < 200 || r.height < 200) return; let best = i.currentSrc || i.src || "", bw = i.naturalWidth || 0; (i.srcset || "").split(",").forEach((part) => { const bits = part.trim().split(/\\s+/); const n = parseInt(bits[1] || "0", 10); if (bits[0] && n > bw) { best = bits[0]; bw = n; } }); if (/(cdninstagram\\.com|fbcdn\\.net)/.test(best)) out.push({ kind: "IMAGE", url: best, width: bw || undefined }); }); return out; };
+      const story = async (label, viaApi, storyId, username) => {
+        const extra = { reelLabel: label, storyId: storyId, username: username };
+        const found = onPage(storyId || "");
+        if (found.length) return Object.assign(base, extra, { kind: "storypage", pageJson: found });
+        let raw = null;
+        try { raw = await viaApi(); } catch (e) { if (e && e.message === SPAM) throw e; }
+        if (raw) return Object.assign(base, extra, storyId ? { kind: "post", raw: raw } : { kind: "reel", raw: raw });
+        const media = onScreen();
+        if (media.length) return Object.assign(base, extra, { kind: "screen", media: media });
+        throw new Error("Couldn't find the story's media on this page. Let it start playing, then tap the bookmark again.");
+      };
       if (hl) {
-        const raw = await get("/api/v1/feed/reels_media/?reel_ids=highlight:" + hl[1]);
-        if (!raw) throw new Error("Couldn't read this highlight. Make sure you can see it.");
-        msg = Object.assign(base, { kind: "reel", reelLabel: "highlight_" + hl[1], raw: raw });
+        msg = await story("highlight_" + hl[1], () => get("/api/v1/feed/reels_media/?reel_ids=highlight:" + hl[1]));
       } else if (su) {
-        const u = await userId(su[1]);
-        const raw = u.id ? await get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null;
-        if (!raw) throw new Error("Couldn't read these stories. Make sure you can see them.");
-        msg = Object.assign(base, { kind: "reel", reelLabel: "stories_" + su[1], raw: raw });
-      } else if (m || st) {
-        const code = m ? m[1] : undefined;
-        const found = code ? onPage(code) : [];
-        const raw = found.length ? null : await get("/api/v1/media/" + (st ? st[2] : sc2id(m[1])) + "/info/");
-        if (!found.length && !raw && st) throw new Error("Couldn't read this story. Make sure you can see it.");
+        msg = await story("stories_" + su[1], async () => { const u = await userId(su[1]); return u.id ? get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null; }, undefined, su[1]);
+      } else if (st) {
+        msg = await story("story_" + st[2], () => get("/api/v1/media/" + st[2] + "/info/"), st[2], st[1]);
+      } else if (m) {
+        const code = m[1];
+        const found = onPage(code);
+        const raw = found.length ? null : await get("/api/v1/media/" + sc2id(code) + "/info/");
         msg = Object.assign(base, { kind: "post", shortcode: code, pageJson: found.length ? found : undefined, raw: raw, html: found.length || raw ? undefined : document.documentElement.outerHTML });
       } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0) {
         const u = await userId(seg[0]);

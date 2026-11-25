@@ -295,10 +295,14 @@ export function parseStoryData(json: unknown, link: StoryLink): Post {
     const one = deepFind(json, (o): o is V1Item => isV1Item(o) && pkOf(o as V1Item) === link.storyId);
     if (one) return { ...fromV1(one, link.canonicalUrl), id: `story_${link.storyId}`, url: link.canonicalUrl };
   }
-  const tray = deepFind(json, (o): o is ReelMedia => {
+  const isTray = (o: unknown): o is ReelMedia => {
     const items = (o as ReelMedia)?.items;
     return Array.isArray(items) && items.length > 0 && items.every(isV1Item);
-  });
+  };
+  // Prefer the tray belonging to the person in the link (pages can include other people's stories).
+  const tray =
+    (link.username && deepFind(json, (o): o is ReelMedia => isTray(o) && (o as ReelMedia).user?.username?.toLowerCase() === link.username!.toLowerCase())) ||
+    deepFind(json, isTray);
   if (tray?.items?.length) {
     const label = link.kind === "highlight" ? `highlight_${link.highlightId}` : `stories_${link.username}`;
     return parseInstagramReel({ reels_media: [tray] }, label, link.canonicalUrl);

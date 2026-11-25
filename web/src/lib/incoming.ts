@@ -1,14 +1,16 @@
-import { parseInstagramHtml, parseInstagramJson, parseInstagramProfile, parseInstagramReel, parsePageJson } from "./instagram";
+import { parseInstagramHtml, parseInstagramJson, parseInstagramProfile, parseInstagramReel, parsePageJson, parseStoryData, type StoryLink } from "./instagram";
 import { parseRedditJson } from "./reddit";
-import { UserError, type Post } from "./types";
+import { UserError, type MediaItem, type Post } from "./types";
 
 /** Data collected on the Instagram/Reddit page by the bookmark or the iOS Shortcut. */
 export type Collected = {
   platform: "instagram" | "reddit";
   url: string;
-  kind?: "post" | "reel" | "profile";
+  kind?: "post" | "reel" | "profile" | "storypage" | "screen";
   reelLabel?: string;
   username?: string;
+  storyId?: string;
+  media?: MediaItem[];
   shortcode?: string;
   pageJson?: string[];
   raw?: unknown;
@@ -22,6 +24,37 @@ export function parseCollected(msg: Collected): Post {
   if (msg.platform === "reddit") return parseRedditJson(msg.raw);
   if (msg.kind === "reel") return parseInstagramReel(msg.raw, msg.reelLabel ?? "stories", msg.url);
   if (msg.kind === "profile") return parseInstagramProfile(msg.raw, msg.username ?? "", msg.url);
+  if (msg.kind === "storypage" || msg.kind === "screen") {
+    const isHighlight = msg.reelLabel?.startsWith("highlight_");
+    const link: StoryLink = {
+      kind: isHighlight ? "highlight" : "story",
+      username: msg.username,
+      storyId: msg.storyId,
+      highlightId: isHighlight ? msg.reelLabel!.slice(10) : undefined,
+      canonicalUrl: msg.url,
+    };
+    if (msg.kind === "storypage") {
+      const blocks = (msg.pageJson ?? []).map((b) => {
+        try {
+          return JSON.parse(b);
+        } catch {
+          return null;
+        }
+      });
+      return parseStoryData(blocks, link);
+    }
+    const items = (msg.media ?? []).filter((m) => typeof m?.url === "string" && /^https:\/\//.test(m.url) && (m.kind === "IMAGE" || m.kind === "VIDEO"));
+    if (!items.length) throw new UserError("No media was found on the screen.");
+    return {
+      platform: "instagram",
+      id: (msg.reelLabel ?? "story").replace(/[^\w.-]/g, "_"),
+      url: msg.url,
+      author: msg.username,
+      title: "From your screen",
+      items: items.map((m) => ({ kind: m.kind, url: m.url, width: m.width, height: m.height, thumbUrl: m.thumbUrl })),
+      notes: items.some((m) => m.kind === "IMAGE") && !items.some((m) => m.kind === "VIDEO") ? ["Saved what's visible on screen. If this story is a video, Instagram may only expose its preview image here."] : undefined,
+    };
+  }
   if (msg.pageJson?.length) return parsePageJson(msg.pageJson, msg.url, msg.shortcode);
   if (msg.raw) return parseInstagramJson(msg.raw, msg.url, msg.shortcode);
   if (msg.html) return parseInstagramHtml(msg.html, msg.shortcode);

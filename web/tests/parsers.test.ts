@@ -453,3 +453,69 @@ describe("quality options", () => {
     expect(seen).toEqual([`${CDN}/small.jpg`]);
   });
 });
+
+describe("stories: page data, then request, then on-screen fallback", () => {
+  type El = Record<string, unknown>;
+  async function runWith(pathname: string, dom: { scripts?: string[]; videos?: El[]; imgs?: El[] }, responses: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    let opened: string | null = null;
+    let posted: Record<string, unknown> | null = null;
+    let listener: ((e: unknown) => void) | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" } as unknown as HTMLElement;
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const win = { postMessage: (m: Record<string, unknown>) => (posted = m) };
+    g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
+    g.document = {
+      cookie: "",
+      querySelectorAll: (sel: string) => (sel === "video" ? dom.videos ?? [] : sel === "img" ? dom.imgs ?? [] : (dom.scripts ?? []).map((t) => ({ textContent: t }))),
+      getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" },
+    };
+    g.window = { open: (u: string) => ((opened = u), win), addEventListener: (_: string, fn: (e: unknown) => void) => (listener = fn) };
+    g.fetch = async (u: string) => {
+      calls.push(u);
+      const key = Object.keys(responses).find((k) => u.includes(k));
+      return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
+    };
+    try {
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      // Simulate the app saying "ready" so the bookmark hands over its data.
+      await (listener as unknown as (e: unknown) => Promise<void>)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
+    } finally {
+      Object.assign(g, saved);
+    }
+    return { calls, opened, posted: posted as Record<string, unknown> | null, toast: (toastEl as unknown as { textContent: string }).textContent };
+  }
+  const bigImg = { getBoundingClientRect: () => ({ width: 390, height: 693 }), currentSrc: `${CDN}/s_640.jpg`, src: `${CDN}/s_640.jpg`, naturalWidth: 640, srcset: `${CDN}/s_640.jpg 640w, ${CDN}/s_1080.jpg 1080w` };
+  const avatar = { getBoundingClientRect: () => ({ width: 32, height: 32 }), src: `${CDN}/avatar.jpg`, srcset: "" };
+
+  it("falls back to the media on screen when the address has no story number and Instagram doesn't answer", async () => {
+    const r = await runWith("/stories/someone/", { imgs: [avatar, bigImg] });
+    expect(r.opened).toBe("https://entity-44.github.io/downloader/#/receive");
+    expect(r.posted).toMatchObject({ kind: "screen", username: "someone", media: [{ kind: "IMAGE", url: `${CDN}/s_1080.jpg`, width: 1080 }] });
+    const { parseCollected } = await import("../src/lib/incoming");
+    const post = parseCollected(r.posted as never);
+    expect(post.items).toEqual([{ kind: "IMAGE", url: `${CDN}/s_1080.jpg`, width: 1080, height: undefined, thumbUrl: undefined }]);
+  });
+
+  it("prefers a playable video on screen", async () => {
+    const vid = { getBoundingClientRect: () => ({ width: 390, height: 693 }), currentSrc: `${CDN}/story.mp4`, videoWidth: 720, videoHeight: 1280, poster: `${CDN}/poster.jpg` };
+    const r = await runWith("/stories/someone/", { videos: [vid, { currentSrc: "blob:https://www.instagram.com/x", getBoundingClientRect: () => ({ width: 390 }) }] });
+    expect((r.posted?.media as El[]).map((m) => m.url)).toEqual([`${CDN}/story.mp4`]);
+  });
+
+  it("uses story data already in the page first, with no requests", async () => {
+    const tray = JSON.stringify({ reels_media: [{ user: { username: "other" }, items: [{ pk: "9", image_versions2: { candidates: [{ url: `${CDN}/other.jpg`, width: 1080 }] } }] }, { user: { username: "someone" }, items: [{ pk: "1", image_versions2: { candidates: [{ url: `${CDN}/mine.jpg`, width: 1080 }] } }] }] });
+    const r = await runWith("/stories/someone/", { scripts: [tray] });
+    expect(r.calls).toEqual([]);
+    const { parseCollected } = await import("../src/lib/incoming");
+    const post = parseCollected(r.posted as never);
+    expect(post.items[0].url).toBe(`${CDN}/mine.jpg`); // the right person's stories, not someone else's
+  });
+
+  it("explains clearly when nothing can be found", async () => {
+    const r = await runWith("/stories/someone/", { imgs: [avatar] });
+    expect(r.opened).toBeNull();
+    expect(r.toast).toMatch(/Let it start playing/);
+  });
+});
