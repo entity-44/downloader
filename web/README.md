@@ -10,12 +10,11 @@ A static build of Keepsake that runs entirely in your browser. No server, no acc
 |---|---|
 | Instagram posts, reels, carousels, stories | **One-click button** (bookmarklet) on the post you're viewing on instagram.com |
 | Reddit videos **with sound**, images, galleries | Button on reddit.com, a pasted `v.redd.it` link, or a pasted post link (with an optional Reddit client ID) |
-| Your whole Instagram history | Import the official data-export ZIP (unpacked in the browser) |
-| Files you were given | Add to your library |
+| Your whole Instagram history | Open the official data-export ZIP, browse it once, download what you want |
 | Official Instagram API (optional) | Facebook Login browser flow (no secret) for Business/Creator accounts linked to a Page |
 | Backup | Paste the post's JSON / page source |
 
-Your library is stored in the browser (IndexedDB) on each device. Reddit's separate video and audio streams are merged with a self-hosted FFmpeg WebAssembly build, loaded only when needed.
+It's one-time by design: paste a link, download, start over. Nothing is stored. Reloading clears everything. Reddit's separate video and audio streams are merged with a self-hosted FFmpeg WebAssembly build, loaded only when needed.
 
 ## How the button works
 
@@ -39,7 +38,6 @@ Deployment is automatic: `.github/workflows/pages.yml` tests, builds and publish
 
 - Instagram links can't be fetched by pasting alone. Instagram blocks other sites, so use the button.
 - The button relies on Instagram/Reddit internal web data. It can break when they change their sites, and it's an unofficial method (terms-of-service grey area).
-- Each device has its own library; nothing syncs.
 - Mobile: bookmarklets work in Safari/Chrome (not inside the Instagram/Reddit apps) and take a one-time setup.
 - Reddit share links (`/r/x/s/…`) must be opened first.
 - HEIC thumbnails only render in Safari.

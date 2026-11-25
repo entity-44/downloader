@@ -45,7 +45,7 @@ export function Receive() {
       {error && <Notice tone="error" title="Couldn't receive the post">{error}</Notice>}
       {post && (
         <>
-          <PostResult post={post} />
+          <PostResult post={post} resetLabel="Close tab" onReset={() => { window.close(); setTimeout(() => (location.hash = "#/"), 150); }} />
           <p className="text-xs text-muted">Keep the original tab open until downloads finish. Some files can only be fetched through it.</p>
         </>
       )}

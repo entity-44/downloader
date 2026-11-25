@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { IconArchive, IconClipboard, IconDownload, IconLink, IconChevronRight } from "../components/icons";
 import { PostResult } from "../components/PostResult";
 import { Badge, Button, Card, Notice, SectionTitle } from "../components/ui";
@@ -10,6 +10,15 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<{ message: string; needsButton?: boolean } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function reset() {
+    setInput("");
+    setPost(null);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    inputRef.current?.focus();
+  }
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -44,7 +53,7 @@ export function Home() {
           <span className="block bg-clip-text text-transparent brand-gradient">Privately, in your browser.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl animate-fade-up text-muted [animation-delay:60ms] sm:text-lg">
-          Paste a link, or tap the Keepsake button while viewing a post. Reddit videos are saved with sound. Nothing is uploaded anywhere.
+          Paste a link, download, done. Or tap the Keepsake button while viewing a post. Reddit videos come with sound. Nothing is stored or uploaded.
         </p>
         <form onSubmit={submit} className="surface mt-8 animate-fade-up rounded-2xl p-2 text-left shadow-xl shadow-black/[0.04] [animation-delay:120ms] sm:p-2.5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -52,6 +61,7 @@ export function Home() {
               <span className="sr-only">Post link or pasted data</span>
               <IconLink className="pointer-events-none absolute left-3.5 size-5 text-muted" />
               <input
+                ref={inputRef}
                 className="h-12 w-full rounded-xl bg-transparent pl-11 pr-24 text-base outline-none placeholder:text-[var(--muted)] sm:h-14"
                 placeholder="Paste an Instagram or Reddit link…"
                 autoComplete="off"
@@ -81,12 +91,11 @@ export function Home() {
           </Notice>
         </div>
       )}
-      {post && <div className="mx-auto max-w-4xl"><PostResult post={post} /></div>}
+      {post && <div className="mx-auto max-w-4xl"><PostResult key={post.url + post.id} post={post} onReset={reset} /></div>}
 
-      <div className="grid gap-5 sm:grid-cols-3">
-        <QuickLink href="#/button" icon={IconLink} title="One-click button" text="Add it once, then tap it on any Instagram or Reddit post to save it here." badge="Recommended" />
-        <QuickLink href="#/import" icon={IconArchive} title="Import your Instagram data" text="Your full export: posts, reels and stories, including private accounts." />
-        <QuickLink href="#/library" icon={IconDownload} title="Your library" text="Everything you’ve saved, stored privately in this browser." />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <QuickLink href="#/button" icon={IconLink} title="One-click button" text="Add it once, then tap it on any Instagram or Reddit post to download it." badge="Recommended" />
+        <QuickLink href="#/import" icon={IconArchive} title="Import your Instagram data" text="Browse your full export once and download what you want: posts, reels and stories." />
       </div>
 
       <Card>

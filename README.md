@@ -9,7 +9,7 @@ Save Instagram and Reddit media privately. Two versions live in this repo. Pick 
 | **Instagram posts, reels, carousels, stories** | ✅ One-click button on the post | ✅ Official API (your Business/Creator accounts) |
 | **Reddit videos (with sound), images, galleries** | ✅ | — |
 | **Instagram data-export import + gallery** | ✅ In the browser | ✅ On the server |
-| **Library** | Per device (browser storage) | Shared across devices, with sign-in |
+| **Storage** | None. One-time: download and go | Saved library shared across devices, with sign-in |
 | **Setup** | None (add the button once) | Docker + optional Meta app |
 | **Method** | Reads the post you're viewing with your own session (unofficial) | Official APIs and your own files only |
 

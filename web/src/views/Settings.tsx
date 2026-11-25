@@ -1,21 +1,17 @@
 import { useEffect, useState } from "react";
 import { IconExternal, IconMonitor, IconMoon, IconSun } from "../components/icons";
 import { PostResult } from "../components/PostResult";
-import { Badge, Button, Card, ConfirmButton, Notice, PageHeader, SectionTitle, cn } from "../components/ui";
-import { clearAll, requestPersistence, storageInfo } from "../lib/db";
+import { Badge, Button, Card, Notice, PageHeader, SectionTitle, cn } from "../components/ui";
 import { appUrl, facebookLogout, facebookToken, graphMediaToPost, listIgAccounts, listIgMedia, startFacebookLogin, type GraphMedia, type IgAccount } from "../lib/facebook";
-import { formatBytes } from "../lib/files";
 import { applyTheme, getTheme, setSetting, setting } from "../lib/router";
 import { UserError, type Post } from "../lib/types";
 
 export function Settings({ justConnected }: { justConnected: boolean }) {
   const [theme, setTheme] = useState(getTheme);
-  const [info, setInfo] = useState<{ usage: number; quota: number; persisted: boolean } | null>(null);
-  useEffect(() => void storageInfo().then(setInfo), []);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="All settings are stored in this browser only." />
+      <PageHeader title="Settings" description="These settings are remembered in this browser. No media is ever stored." />
       <Card>
         <SectionTitle title="Appearance" />
         <div className="grid max-w-md grid-cols-3 gap-2">
@@ -29,20 +25,6 @@ export function Settings({ justConnected }: { justConnected: boolean }) {
 
       <RedditSettings />
       <InstagramApi justConnected={justConnected} />
-
-      <Card>
-        <SectionTitle title="Storage" description="Your library lives in this browser. Other devices have their own." />
-        {info && (
-          <p className="mb-4 text-sm text-muted">
-            Using <span className="font-medium text-[var(--text)]">{formatBytes(info.usage)}</span>{info.quota ? ` of about ${formatBytes(info.quota)}` : ""}.{" "}
-            {info.persisted ? <Badge tone="green">Stored permanently</Badge> : <Badge tone="amber">May be cleared by the browser</Badge>}
-          </p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {info && !info.persisted && <Button onClick={async () => { await requestPersistence(); setInfo(await storageInfo()); }}>Keep data permanently</Button>}
-          <ConfirmButton size="md" confirmLabel="Delete everything" onConfirm={async () => { await clearAll(); setInfo(await storageInfo()); }}>Delete all saved media</ConfirmButton>
-        </div>
-      </Card>
     </div>
   );
 }
@@ -130,7 +112,7 @@ function InstagramApi({ justConnected }: { justConnected: boolean }) {
             </div>
           )}
           {media?.after && <Button size="sm" onClick={() => loadMedia(media.account, media.after)}>Load more</Button>}
-          {post && <PostResult key={post.id} post={post} source="instagram-api" />}
+          {post && <PostResult key={post.id} post={post} onReset={() => setPost(null)} resetLabel="Close" />}
           <div className="flex gap-2">
             <Button size="sm" variant="ghost" onClick={() => { facebookLogout(); setConnected(false); setAccounts(null); setMedia(null); }}>Disconnect</Button>
             <a className="inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:underline" href="https://www.facebook.com/settings?tab=business_tools" target="_blank" rel="noopener noreferrer">Manage app access <IconExternal className="size-3" /></a>

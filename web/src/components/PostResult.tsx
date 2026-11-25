@@ -1,12 +1,8 @@
-import { useMemo, useState } from "react";
-import { addItem, newId, putCollection, type Collection, type Source } from "../lib/db";
+import { useState } from "react";
 import { downloadItem } from "../lib/fetchmedia";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
-import { go } from "../lib/router";
-import { sniffBlob } from "../lib/sniff";
-import { makeThumb } from "../lib/thumbs";
 import { UserError, type MediaItem, type Post } from "../lib/types";
-import { zipBlobs } from "../lib/zipexport";
+import { zipAndSave } from "../lib/zipexport";
 import { IconCheck, IconDownload, IconExternal, IconImage, IconLayers, IconVideo } from "./icons";
 import { Badge, Button, Notice, Spinner, cn } from "./ui";
 
@@ -14,15 +10,18 @@ type ItemState = { status: "idle" | "busy" | "done" | "error"; stage?: string; p
 
 const ATTEST_KEY = "attested_session";
 
-export function PostResult({ post, source }: { post: Post; source?: Source }) {
+/**
+ * One-time result: preview, download (single file or ZIP), then start over.
+ * Downloaded files are held only until the page is left or reset.
+ */
+export function PostResult({ post, onReset, resetLabel = "Start over" }: { post: Post; onReset?: () => void; resetLabel?: string }) {
   const [attested, setAttested] = useState(() => sessionStorage.getItem(ATTEST_KEY) === "1");
   const [states, setStates] = useState<Record<number, ItemState>>({});
   const [blobs] = useState(() => new Map<number, Blob>());
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [zipping, setZipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ext = (b: Blob, item: MediaItem) => (b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg"));
+  const ext = (b: Blob, item: MediaItem) => b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg");
   const name = (i: number, b: Blob) => postFilename({ platform: post.platform, author: post.author, id: post.id, takenAt: post.takenAt, index: i, total: post.items.length, ext: ext(b, post.items[i]) });
   const set = (i: number, s: ItemState) => setStates((prev) => ({ ...prev, [i]: s }));
 
@@ -36,9 +35,39 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
       set(i, { status: "done", note: r.note });
       return r.blob;
     } catch (e) {
-      const msg = e instanceof UserError ? e.message : "Download failed. Try again.";
-      set(i, { status: "error", error: msg });
+      set(i, { status: "error", error: e instanceof UserError ? e.message : "Download failed. Try again." });
       throw e;
+    }
+  }
+
+  async function downloadOne(i: number) {
+    try {
+      const b = await get(i);
+      saveBlob(b, name(i, b));
+    } catch {
+      /* shown on the item */
+    }
+  }
+
+  async function downloadAll() {
+    setError(null);
+    setZipping(true);
+    try {
+      const files: Array<{ name: string; blob: Blob }> = [];
+      for (let i = 0; i < post.items.length; i++) {
+        try {
+          const b = await get(i);
+          files.push({ name: name(i, b), blob: b });
+        } catch {
+          /* skip failed items */
+        }
+      }
+      if (!files.length) throw new UserError("None of the files could be downloaded.");
+      await zipAndSave(files, `${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`);
+    } catch (e) {
+      setError(e instanceof UserError ? e.message : "Couldn't create the ZIP.");
+    } finally {
+      setZipping(false);
     }
   }
 
@@ -48,94 +77,8 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
     else sessionStorage.removeItem(ATTEST_KEY);
   };
 
-  async function downloadOne(i: number) {
-    try {
-      const b = await get(i);
-      saveBlob(b, name(i, b));
-    } catch {
-      /* state shows the error */
-    }
-  }
-
-  async function downloadAll() {
-    setError(null);
-    const files: Array<{ name: string; blob: Blob }> = [];
-    for (let i = 0; i < post.items.length; i++) {
-      try {
-        const b = await get(i);
-        files.push({ name: name(i, b), blob: b });
-      } catch {
-        /* skip failed items */
-      }
-    }
-    if (!files.length) return setError("None of the files could be downloaded.");
-    await zipBlobs(files, `${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`);
-  }
-
-  async function saveToLibrary() {
-    setSaving(true);
-    setError(null);
-    try {
-      const c: Collection = {
-        id: newId(),
-        source: source ?? post.platform,
-        title: post.title ?? post.caption?.split("\n")[0]?.slice(0, 120) ?? `${post.platform === "reddit" ? "Reddit" : "Instagram"} post`,
-        sourceUrl: post.url,
-        author: post.author,
-        caption: post.caption,
-        takenAt: post.takenAt,
-        createdAt: new Date().toISOString(),
-        count: 0,
-        sizeBytes: 0,
-      };
-      await putCollection(c);
-      for (let i = 0; i < post.items.length; i++) {
-        let b: Blob;
-        try {
-          b = await get(i);
-        } catch {
-          continue;
-        }
-        const sn = await sniffBlob(b);
-        if (!sn) continue;
-        const { thumb, width, height, ...rest } = await makeThumb(b, sn.kind);
-        const id = newId();
-        await addItem(
-          {
-            id,
-            collectionId: c.id,
-            kind: sn.kind,
-            mime: sn.mime,
-            size: b.size,
-            filename: name(i, b),
-            category: post.platform,
-            caption: post.caption,
-            takenAt: post.takenAt,
-            position: i,
-            width,
-            height,
-            durationSec: "durationSec" in rest ? (rest.durationSec as number | undefined) : post.items[i].durationSec,
-            hasThumb: !!thumb,
-          },
-          b,
-          thumb,
-        );
-        c.count++;
-        c.sizeBytes += b.size;
-        c.coverId ??= id;
-      }
-      if (!c.count) throw new UserError("Nothing could be saved.");
-      await putCollection(c);
-      setSaved(c.id);
-    } catch (e) {
-      setError(e instanceof UserError ? e.message : "Saving failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const busy = useMemo(() => Object.values(states).some((s) => s.status === "busy"), [states]);
-  const isCarousel = post.items.length > 1;
+  const busy = zipping || Object.values(states).some((s) => s.status === "busy");
+  const multi = post.items.length > 1;
 
   return (
     <div className="surface rounded-2xl p-5 animate-fade-up">
@@ -143,8 +86,8 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
         <Badge tone={post.platform === "reddit" ? "amber" : "violet"}>{post.platform === "reddit" ? "Reddit" : "Instagram"}</Badge>
         {post.author && <span className="text-sm font-medium">{post.platform === "reddit" ? `u/${post.author}` : `@${post.author}`}</span>}
         <span className="inline-flex items-center gap-1 text-xs text-muted">
-          {isCarousel ? <IconLayers className="size-3.5" /> : post.items[0]?.kind === "VIDEO" ? <IconVideo className="size-3.5" /> : <IconImage className="size-3.5" />}
-          {isCarousel ? `${post.items.length} items` : post.items[0]?.kind === "VIDEO" ? "Video" : "Image"}
+          {multi ? <IconLayers className="size-3.5" /> : post.items[0]?.kind === "VIDEO" ? <IconVideo className="size-3.5" /> : <IconImage className="size-3.5" />}
+          {multi ? `${post.items.length} items` : post.items[0]?.kind === "VIDEO" ? "Video" : "Image"}
         </span>
         {post.url && (
           <a href={post.url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex max-w-full items-center gap-1 truncate text-xs text-muted hover:underline">
@@ -159,7 +102,7 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
         <Notice tone="error" title="Nothing to download">This post doesn't contain downloadable images or videos.</Notice>
       ) : (
         <>
-          <div className={cn("grid gap-3", post.items.length === 1 ? "grid-cols-1 sm:max-w-md" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4")}>
+          <div className={cn("grid gap-3", multi ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 sm:max-w-md")}>
             {post.items.map((it, i) => {
               const s = states[i] ?? { status: "idle" };
               return (
@@ -181,16 +124,18 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center justify-between gap-1 p-2">
-                    <a href={it.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-[var(--surface-2)]" title="Open the original file (long-press or right-click to save)">
-                      <IconExternal className="size-3.5" /> Open file
-                    </a>
-                    <button disabled={!attested || s.status === "busy"} onClick={() => downloadOne(i)} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition hover:bg-[var(--surface-2)] disabled:opacity-40">
-                      {s.status === "done" ? <IconCheck className="size-4 text-emerald-500" /> : <IconDownload className="size-4" />} Save
-                    </button>
-                  </div>
-                  {s.status === "error" && <p className="px-2.5 pb-2.5 text-xs text-red-600 dark:text-red-400">{s.error}</p>}
-                  {s.note && <p className="px-2.5 pb-2.5 text-xs text-amber-600 dark:text-amber-400">{s.note}</p>}
+                  {multi && (
+                    <div className="flex items-center justify-between gap-1 p-2">
+                      <a href={it.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-[var(--surface-2)]" title="Open the original file">
+                        <IconExternal className="size-3.5" /> Open
+                      </a>
+                      <button disabled={!attested || s.status === "busy"} onClick={() => downloadOne(i)} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition hover:bg-[var(--surface-2)] disabled:opacity-40">
+                        {s.status === "done" ? <IconCheck className="size-4 text-emerald-500" /> : <IconDownload className="size-4" />} Download
+                      </button>
+                    </div>
+                  )}
+                  {s.status === "error" && <p className="px-2.5 py-2 text-xs text-red-600 dark:text-red-400">{s.error}</p>}
+                  {s.note && <p className="px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">{s.note}</p>}
                 </div>
               );
             })}
@@ -200,25 +145,34 @@ export function PostResult({ post, source }: { post: Post; source?: Source }) {
             <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent-500)]" checked={attested} onChange={(e) => confirm(e.target.checked)} />
             <span>I own this media or have the owner’s permission to keep a copy.</span>
           </label>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="primary" disabled={!attested || busy} loading={saving} onClick={saveToLibrary}>
-              <IconCheck className="size-4" /> Save to library
-            </Button>
-            {isCarousel && (
-              <Button disabled={!attested || busy} onClick={downloadAll}>
-                <IconDownload className="size-4" /> Download all as ZIP
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {multi ? (
+              <Button variant="primary" size="lg" disabled={!attested || busy} loading={zipping} onClick={downloadAll}>
+                {!zipping && <IconDownload className="size-5" />} Download all ({post.items.length}) as ZIP
+              </Button>
+            ) : (
+              <Button variant="primary" size="lg" disabled={!attested || busy} loading={states[0]?.status === "busy"} onClick={() => downloadOne(0)}>
+                {states[0]?.status !== "busy" && (states[0]?.status === "done" ? <IconCheck className="size-5" /> : <IconDownload className="size-5" />)}
+                {states[0]?.status === "done" ? "Download again" : `Download ${post.items[0].kind === "VIDEO" ? "video" : "image"}`}
+              </Button>
+            )}
+            {!multi && (
+              <a href={post.items[0].url} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center gap-1.5 rounded-xl px-4 text-sm text-muted hover:bg-[var(--surface-2)]" title="Open the original file (long-press or right-click to save)">
+                <IconExternal className="size-4" /> Open file
+              </a>
+            )}
+            {onReset && (
+              <Button size="lg" variant="ghost" className="ml-auto" onClick={onReset}>
+                {resetLabel}
               </Button>
             )}
           </div>
-          {saved && (
-            <div className="mt-4">
-              <Notice tone="success" title="Saved to your library" action={<Button size="sm" onClick={() => go(`collection/${saved}`)}>Open</Button>}>
-                Stored privately in this browser.
-              </Notice>
-            </div>
-          )}
           {error && <div className="mt-4"><Notice tone="error">{error}</Notice></div>}
         </>
+      )}
+      {post.items.length === 0 && onReset && (
+        <div className="mt-4"><Button onClick={onReset}>{resetLabel}</Button></div>
       )}
     </div>
   );

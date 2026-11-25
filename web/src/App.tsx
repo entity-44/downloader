@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
-import { IconArchive, IconHome, IconLayers, IconMonitor, IconMoon, IconSettings, IconSun, IconLink } from "./components/icons";
+import { IconArchive, IconHome, IconMonitor, IconMoon, IconSettings, IconSun, IconLink } from "./components/icons";
 import { cn } from "./components/ui";
 import { consumeFacebookRedirect } from "./lib/facebook";
 import { applyTheme, getTheme, useRoute } from "./lib/router";
 import { ButtonSetup } from "./views/ButtonSetup";
-import { CollectionView } from "./views/CollectionView";
 import { Home } from "./views/Home";
 import { ImportView } from "./views/ImportView";
-import { Library } from "./views/Library";
 import { Receive } from "./views/Receive";
 import { Settings } from "./views/Settings";
 
 const NAV = [
   { path: "", label: "Download", icon: IconHome },
-  { path: "library", label: "Library", icon: IconLayers },
   { path: "import", label: "Import", icon: IconArchive },
   { path: "button", label: "Button", icon: IconLink },
   { path: "settings", label: "Settings", icon: IconSettings },
@@ -65,12 +62,10 @@ export function App() {
   const route = useRoute();
   const [fbConnected] = useState(() => consumeFacebookRedirect());
   const top = route[0] ?? "";
-  const active = (p: string) => (p === "" ? top === "" || top === "receive" : top === p || (p === "library" && top === "collection"));
+  const active = (p: string) => (p === "" ? top === "" || top === "receive" : top === p);
 
   let view: React.ReactNode;
   if (top === "receive") view = <Receive />;
-  else if (top === "library") view = <Library />;
-  else if (top === "collection" && route[1]) view = <CollectionView id={route[1]} />;
   else if (top === "import") view = <ImportView />;
   else if (top === "button") view = <ButtonSetup />;
   else if (top === "settings") view = <Settings justConnected={fbConnected} />;
@@ -92,9 +87,9 @@ export function App() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-8 sm:px-6 md:pb-16 md:pt-12">{view}</main>
-      <footer className="hidden pb-8 text-center text-xs text-muted md:block">Everything runs in your browser. Nothing is uploaded.</footer>
+      <footer className="hidden pb-8 text-center text-xs text-muted md:block">Everything runs in your browser. Nothing is stored or uploaded.</footer>
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-default bg-[var(--bg)]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5">
+        <div className="mx-auto grid max-w-md grid-cols-4">
           {NAV.map((n) => (
             <a key={n.path} href={`#/${n.path}`} className={cn("flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition", active(n.path) ? "text-[var(--color-accent-500)]" : "text-muted")}>
               <n.icon className="size-5" />
