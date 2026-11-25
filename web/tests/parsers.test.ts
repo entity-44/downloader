@@ -329,3 +329,41 @@ describe("avoiding Instagram's spam flag", () => {
     expect(links.pageSource).toBe("view-source:https://www.instagram.com/p/CxYz123AbC/");
   });
 });
+
+describe("pasted story and highlight links", () => {
+  it("parses story and highlight URLs", async () => {
+    const { parseStoryUrl } = await import("../src/lib/instagram");
+    expect(parseStoryUrl("https://www.instagram.com/stories/some.one/3312345678901234567/?utm_source=ig_story_item_share")).toEqual({ kind: "story", username: "some.one", storyId: "3312345678901234567", canonicalUrl: "https://www.instagram.com/stories/some.one/3312345678901234567/" });
+    expect(parseStoryUrl("instagram.com/stories/highlights/17900000000000000/")).toMatchObject({ kind: "highlight", highlightId: "17900000000000000" });
+    expect(parseStoryUrl("https://www.instagram.com/stories/someone/")).toMatchObject({ kind: "story", storyId: undefined });
+    expect(parseStoryUrl("https://evil.com/stories/x/1/")).toBeNull();
+  });
+
+  it("offers the copy-and-paste steps for stories instead of refusing", async () => {
+    const { resolveInput, NeedsGuidedPaste, dataLinks } = await import("../src/lib/resolve");
+    const err = await resolveInput("https://www.instagram.com/stories/someone/3312345678901234567/").catch((e) => e);
+    expect(err).toBeInstanceOf(NeedsGuidedPaste);
+    expect(dataLinks(err.link).pageSource).toBe("view-source:https://www.instagram.com/stories/someone/3312345678901234567/");
+  });
+
+  const story = (pk: string, video = false) => ({ pk, id: `${pk}_42`, media_type: video ? 2 : 1, taken_at: 1709467200, user: { username: "someone" }, image_versions2: { candidates: [{ url: `${CDN}/s${pk}.jpg`, width: 1080 }] }, ...(video ? { video_versions: [{ url: `${CDN}/s${pk}.mp4`, width: 720 }] } : {}) });
+  const page = (data: unknown) => `<html><script type="application/json" data-sjs>${JSON.stringify({ require: [["x", { result: data }]] })}</script></html>`;
+
+  it("picks the exact story by id from a pasted page source", async () => {
+    const { parsePastedInstagram } = await import("../src/lib/resolve");
+    const { parseStoryUrl } = await import("../src/lib/instagram");
+    const link = parseStoryUrl("https://www.instagram.com/stories/someone/222/")!;
+    const p = parsePastedInstagram(page({ reels_media: [{ user: { username: "someone" }, items: [story("111"), story("222", true), story("333")] }] }), link);
+    expect(p.items).toHaveLength(1);
+    expect(p.items[0]).toMatchObject({ kind: "VIDEO", url: `${CDN}/s222.mp4` });
+    expect(p.id).toBe("story_222");
+  });
+
+  it("returns every item for highlights and explains when the page has no media", async () => {
+    const { parsePastedInstagram } = await import("../src/lib/resolve");
+    const { parseStoryUrl } = await import("../src/lib/instagram");
+    const hl = parseStoryUrl("https://www.instagram.com/stories/highlights/1790/")!;
+    expect(parsePastedInstagram(page({ data: { items: [story("1"), story("2")] , title: "Trip" } }), hl).items).toHaveLength(2);
+    expect(() => parsePastedInstagram(page({ nothing: true }), hl)).toThrow(/didn't include the story's media/);
+  });
+});

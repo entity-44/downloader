@@ -1,11 +1,11 @@
-import { parseInstagramHtml, parseInstagramJson, parseInstagramUrl, type IgLink } from "./instagram";
+import { parseInstagramHtml, parseInstagramJson, parseInstagramUrl, parseStoryData, parseStoryUrl, type IgLink, type StoryLink } from "./instagram";
 import { fetchRedditPost, parseRedditJson, parseRedditUrl, resolveVreddit } from "./reddit";
 import { setting } from "./router";
 import { UserError, type Post } from "./types";
 
 /** Instagram post link: the user opens a data link in their own signed-in browser and pastes the result. */
 export class NeedsGuidedPaste extends Error {
-  constructor(readonly link: IgLink) {
+  constructor(readonly link: IgLink | StoryLink) {
     super("guided-paste");
   }
 }
@@ -39,9 +39,8 @@ export async function resolveInput(input: string): Promise<Post> {
 
   const ig = parseInstagramUrl(text);
   if (ig) throw new NeedsGuidedPaste(ig);
-  if (/instagram\.com\/stories\//i.test(text)) {
-    throw new NeedsButton("instagram", "Stories can't be read from a pasted link, even with the copy-and-paste steps. Open the story on instagram.com and tap the Keepsake button. It works for private stories you can see.");
-  }
+  const story = parseStoryUrl(text);
+  if (story) throw new NeedsGuidedPaste(story);
   const rd = parseRedditUrl(text);
   if (rd?.kind === "vreddit") return resolveVreddit(rd.videoId);
   if (rd?.kind === "share") throw new NeedsButton("reddit", "Reddit share links (/s/…) can't be opened from here. Open the link, then tap the Keepsake button or copy the full post address.");
@@ -57,15 +56,32 @@ export async function resolveInput(input: string): Promise<Post> {
  * The post's normal page, viewed as source. We deliberately avoid the
  * "?__a=1" data address: Instagram flags it as automated ({"spam":true}).
  */
-export function dataLinks(link: IgLink) {
-  return {
-    post: `https://www.instagram.com/p/${link.shortcode}/`,
-    pageSource: `view-source:https://www.instagram.com/p/${link.shortcode}/`,
-  };
+const isStory = (l: IgLink | StoryLink): l is StoryLink => l.kind === "story" || l.kind === "highlight";
+
+export function dataLinks(link: IgLink | StoryLink) {
+  const page = isStory(link) ? link.canonicalUrl : `https://www.instagram.com/p/${link.shortcode}/`;
+  return { post: page, pageSource: `view-source:${page}` };
+}
+
+/** Extracts every JSON block from a pasted page source. */
+function jsonBlocks(html: string): unknown[] {
+  const out: unknown[] = [];
+  const re = /<script[^>]*type="application\/(?:ld\+)?json"[^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    try {
+      out.push(JSON.parse(m[1]));
+    } catch {
+      /* not JSON */
+    }
+  }
+  return out;
 }
 
 /** Parses text the user copied from Instagram, with helpful errors for common mistakes. */
-export function parsePastedInstagram(text: string, link?: IgLink): Post {
+export function parsePastedInstagram(text: string, link?: IgLink | StoryLink): Post {
+  const story = link && isStory(link) ? link : undefined;
+  const post = link && !isStory(link) ? link : undefined;
   const t = text.trim();
   if (!t) throw new UserError("Paste the text you copied first.");
   if (t.startsWith("{") || t.startsWith("[")) {
@@ -79,13 +95,13 @@ export function parsePastedInstagram(text: string, link?: IgLink): Post {
     if (msg.spam) throw new UserError("Instagram flagged that page as automated (\"spam\": true). Don't retry it. Use the page-source steps above or the one-click button instead, and give it a while before trying again.");
     if (msg.require_login || /login/i.test(msg.message ?? "")) throw new UserError("Instagram says you're not signed in. Sign in to instagram.com in this browser, then open the link again.");
     if (/useragent mismatch|not available|please wait/i.test(msg.message ?? "")) throw new UserError(`Instagram refused that request ("${msg.message}"). Try again in a minute, use the other link below, or use the one-click button.`);
-    return parseInstagramJson(json, link?.canonicalUrl, link?.shortcode);
+    return story ? parseStoryData(json, story) : parseInstagramJson(json, post?.canonicalUrl, post?.shortcode);
   }
   if (/<html|<script/i.test(t)) {
     if (/"loginForm"|accounts\/login|LoginAndSignupPage/i.test(t) && !/image_versions2|video_versions|display_url/.test(t)) {
       throw new UserError("That's Instagram's sign-in page. Sign in to instagram.com in this browser first, then try again.");
     }
-    return parseInstagramHtml(t, link?.shortcode);
+    return story ? parseStoryData(jsonBlocks(t), story) : parseInstagramHtml(t, post?.shortcode);
   }
   throw new UserError("That doesn't look like the text from the Instagram link. Open the link, select all, copy, and paste here.");
 }

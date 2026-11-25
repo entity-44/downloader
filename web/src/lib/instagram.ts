@@ -251,3 +251,46 @@ export function parsePageJson(blocks: string[], sourceUrl: string, shortcode?: s
   }
   throw new UserError("Couldn't find the post data on that page. Reload the post on Instagram and tap the button again.");
 }
+
+// ---- Story / highlight links (pasted) ----
+export type StoryLink = { kind: "story" | "highlight"; username?: string; storyId?: string; highlightId?: string; canonicalUrl: string };
+
+export function parseStoryUrl(input: string): StoryLink | null {
+  let url: URL;
+  try {
+    url = new URL(/^[a-z]+:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`);
+  } catch {
+    return null;
+  }
+  if (!isInstagramHost(url.hostname)) return null;
+  const seg = url.pathname.split("/").filter(Boolean);
+  if (seg[0]?.toLowerCase() !== "stories" || !seg[1]) return null;
+  if (seg[1].toLowerCase() === "highlights" && /^\d{1,30}$/.test(seg[2] ?? "")) {
+    return { kind: "highlight", highlightId: seg[2], canonicalUrl: `https://www.instagram.com/stories/highlights/${seg[2]}/` };
+  }
+  if (!/^[A-Za-z0-9._]{1,30}$/.test(seg[1])) return null;
+  const storyId = /^\d{1,30}$/.test(seg[2] ?? "") ? seg[2] : undefined;
+  return { kind: "story", username: seg[1], storyId, canonicalUrl: `https://www.instagram.com/stories/${seg[1]}/${storyId ? `${storyId}/` : ""}` };
+}
+
+const pkOf = (it: V1Item) => String(it.pk ?? it.id ?? "").split("_")[0];
+
+/**
+ * Finds story media in pasted data (page source or JSON). With a story id,
+ * returns that story; otherwise every story item found in the tray.
+ */
+export function parseStoryData(json: unknown, link: StoryLink): Post {
+  if (link.storyId) {
+    const one = deepFind(json, (o): o is V1Item => isV1Item(o) && pkOf(o as V1Item) === link.storyId);
+    if (one) return { ...fromV1(one, link.canonicalUrl), id: `story_${link.storyId}`, url: link.canonicalUrl };
+  }
+  const tray = deepFind(json, (o): o is ReelMedia => {
+    const items = (o as ReelMedia)?.items;
+    return Array.isArray(items) && items.length > 0 && items.every(isV1Item);
+  });
+  if (tray?.items?.length) {
+    const label = link.kind === "highlight" ? `highlight_${link.highlightId}` : `stories_${link.username}`;
+    return parseInstagramReel({ reels_media: [tray] }, label, link.canonicalUrl);
+  }
+  throw new UserError("That page didn't include the story's media. This can happen with stories. Use the one-click button on the story instead.");
+}

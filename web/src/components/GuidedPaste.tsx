@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { IgLink } from "../lib/instagram";
+import type { IgLink, StoryLink } from "../lib/instagram";
 import { dataLinks, parsePastedInstagram } from "../lib/resolve";
 import { UserError, type Post } from "../lib/types";
 import { IconCheck, IconClipboard, IconDownload, IconExternal, IconLink } from "./icons";
@@ -13,7 +13,9 @@ const isPhone = () => /iPhone|iPad|Android/i.test(navigator.userAgent);
  * Instagram's "?__a=1" data address, which gets flagged as spam. No login is
  * ever entered on this site.
  */
-export function GuidedPaste({ link, onPost }: { link: IgLink; onPost: (p: Post) => void }) {
+export function GuidedPaste({ link, onPost }: { link: IgLink | StoryLink; onPost: (p: Post) => void }) {
+  const isStory = link.kind === "story" || link.kind === "highlight";
+  const what = link.kind === "highlight" ? "highlight" : isStory ? "story" : "post";
   const links = dataLinks(link);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -57,15 +59,15 @@ export function GuidedPaste({ link, onPost }: { link: IgLink; onPost: (p: Post) 
   return (
     <div className="surface space-y-5 rounded-2xl p-5 animate-fade-up">
       <div>
-        <p className="font-medium">Instagram links need one extra step</p>
-        <p className="mt-0.5 text-sm text-muted">Instagram only shows posts to signed-in browsers, so your browser loads the post and hands it over. You never enter your Instagram login here.</p>
+        <p className="font-medium">Instagram {what} links need one extra step</p>
+        <p className="mt-0.5 text-sm text-muted">Instagram only shows {what}s to signed-in browsers, so your browser loads it and hands it over. You never enter your Instagram login here.</p>
       </div>
 
       <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
         <p className="font-medium">Fastest: the one-click button</p>
-        <p className="mt-1 text-muted">Open the post on Instagram and tap the Keepsake button. It reads what’s already on the page, so it sends no extra requests, and it also works for stories and highlights.</p>
+        <p className="mt-1 text-muted">Open it on Instagram and tap the Keepsake button. It reads what’s already on the page, so it sends no extra requests, and it also works for stories and highlights.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <a href={links.post} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-xl surface px-3 text-sm font-medium hover:bg-[var(--surface-2)]"><IconExternal className="size-4" /> Open post on Instagram</a>
+          <a href={links.post} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-xl surface px-3 text-sm font-medium hover:bg-[var(--surface-2)]"><IconExternal className="size-4" /> Open {what} on Instagram</a>
           <a href="#/button" className="inline-flex h-9 items-center rounded-xl px-3 text-sm text-muted underline-offset-4 hover:underline">Set up the button</a>
         </div>
       </div>
@@ -75,6 +77,7 @@ export function GuidedPaste({ link, onPost }: { link: IgLink; onPost: (p: Post) 
       ) : (
         <>
           <p className="text-sm font-medium">Or do it by hand{phone ? " (Chrome on Android)" : ""}:</p>
+          {isStory && <p className="text-xs text-muted">Stories expire after 24 hours. If the page doesn't include the story's media, you'll see a message saying so; then use the button.</p>}
           <ol className="space-y-5">
             <Step n={1}>
               <p className="text-sm">Copy this address, open a <span className="font-medium">new tab</span>, paste it into the address bar and press Enter. You need to be signed in to instagram.com in this browser.</p>

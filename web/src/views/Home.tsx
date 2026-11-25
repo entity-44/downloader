@@ -3,7 +3,7 @@ import { IconArchive, IconClipboard, IconDownload, IconLink, IconChevronRight } 
 import { PostResult } from "../components/PostResult";
 import { Badge, Button, Card, Notice, SectionTitle } from "../components/ui";
 import { GuidedPaste } from "../components/GuidedPaste";
-import type { IgLink } from "../lib/instagram";
+import type { IgLink, StoryLink } from "../lib/instagram";
 import { NeedsButton, NeedsGuidedPaste, resolveInput } from "../lib/resolve";
 import { UserError, type Post } from "../lib/types";
 
@@ -12,7 +12,7 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<{ message: string; needsButton?: boolean } | null>(null);
-  const [guided, setGuided] = useState<IgLink | null>(null);
+  const [guided, setGuided] = useState<IgLink | StoryLink | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -99,7 +99,7 @@ export function Home() {
       )}
       {guided && !post && (
         <div className="mx-auto max-w-3xl">
-          <GuidedPaste key={guided.shortcode} link={guided} onPost={(p) => { setPost(p); setGuided(null); }} />
+          <GuidedPaste key={guided.canonicalUrl} link={guided} onPost={(p) => { setPost(p); setGuided(null); }} />
         </div>
       )}
       {post && <div className="mx-auto max-w-4xl"><PostResult key={post.url + post.id} post={post} onReset={reset} /></div>}
