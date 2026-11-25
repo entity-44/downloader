@@ -53,7 +53,7 @@ const COLLECT = `
       const story = async (label, viaApi, storyId, username) => {
         const extra = { reelLabel: label, storyId: storyId, username: username };
         const found = storyId ? onPage(storyId) : [];
-        if (found.length) return Object.assign(base, extra, { kind: "storypage", pageJson: found });
+        if (found.length) return Object.assign(base, extra, { kind: "storypage", pageJson: found, media: onScreen() });
         let raw = null;
         try { raw = await viaApi(); } catch (e) { if (e && e.message === SPAM) throw e; }
         if (raw) return Object.assign(base, extra, storyId ? { kind: "post", raw: raw } : { kind: "reel", raw: raw });
@@ -95,6 +95,9 @@ const COLLECT = `
     return msg;
   };`;
 
+/** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
+export const CODE_VERSION = 12;
+
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
 export function bookmarkletSource(appUrl: string): string {
@@ -114,7 +117,7 @@ export function bookmarkletSource(appUrl: string): string {
     const done = collect().then((m) => { msg = m; toast("Sent to Keepsake"); }, (err) => { msg = { type: "keepsake:post", platform: /reddit/.test(location.hostname) ? "reddit" : "instagram", url: location.href, error: String(err && err.message || err) }; toast("Keepsake: " + msg.error); });
     window.addEventListener("message", async (e) => {
       if (e.source !== w || e.origin !== ORIGIN || !e.data || typeof e.data.type !== "string") return;
-      if (e.data.type === "keepsake:ready") { await done; w.postMessage(msg, ORIGIN); }
+      if (e.data.type === "keepsake:ready") { await done; msg.v = ${CODE_VERSION}; w.postMessage(msg, ORIGIN); }
     });
   } catch (err) {
     toast("Keepsake: " + (err && err.message || err));
@@ -166,7 +169,7 @@ export function shortcutSource(): string {
   ${TOAST}
   ${COLLECT}
   let sent = false;
-  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; completion(JSON.stringify(o)); };
+  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; completion(JSON.stringify(o)); };
   const guard = setTimeout(() => send({ error: "The Keepsake script took too long on this page. Try again once the post has fully loaded." }), 8000);
   try {
     const msg = await collect();

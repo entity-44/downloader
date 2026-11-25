@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PostResult } from "../components/PostResult";
 import { Notice, Spinner } from "../components/ui";
 import { receivePost } from "../lib/bridge";
+import { CODE_VERSION } from "../lib/bookmarklet";
 import { parseCollected, type Collected } from "../lib/incoming";
 import { UserError, type Post } from "../lib/types";
 
@@ -9,12 +10,14 @@ import { UserError, type Post } from "../lib/types";
 export function Receive() {
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outdated, setOutdated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     receivePost()
       .then((msg) => {
         if (cancelled) return;
+        setOutdated(((msg as Collected).v ?? 0) < CODE_VERSION);
         setPost(parseCollected(msg as Collected));
       })
       .catch((e: Error) => {
@@ -33,6 +36,11 @@ export function Receive() {
       <h1 className="text-2xl font-semibold tracking-tight">Save post</h1>
       {!post && !error && (
         <div className="flex items-center gap-3 text-muted"><Spinner /> Receiving post from the other tab…</div>
+      )}
+{outdated && (
+        <Notice tone="warn" title="Your bookmark code is out of date">
+          It may grab the wrong media. On the <a href="#/button" className="underline underline-offset-4">Button page</a>, copy the new code, clear the old code completely, and paste it in.
+        </Notice>
       )}
       {error && <Notice tone="error" title="Couldn't receive the post">{error}</Notice>}
       {post && (

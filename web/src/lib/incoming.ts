@@ -17,6 +17,8 @@ export type Collected = {
   html?: string;
   error?: string;
   keepsake?: number;
+  /** Collector code version (missing on codes saved before versioning). */
+  v?: number;
 };
 
 export function parseCollected(msg: Collected): Post {
@@ -41,7 +43,12 @@ export function parseCollected(msg: Collected): Post {
           return null;
         }
       });
-      return parseStoryData(blocks, link);
+      try {
+        return parseStoryData(blocks, link);
+      } catch (e) {
+        // Page data in an unexpected format: use what was on screen instead.
+        if (!msg.media?.length) throw e;
+      }
     }
     const items = (msg.media ?? []).filter((m) => typeof m?.url === "string" && /^https:\/\//.test(m.url) && (m.kind === "IMAGE" || m.kind === "VIDEO"));
     if (!items.length) throw new UserError("No media was found on the screen.");

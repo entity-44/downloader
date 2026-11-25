@@ -762,3 +762,34 @@ describe("stories without a number in the address", () => {
     expect(() => parseStoryData(others, { kind: "story", username: "someone", canonicalUrl: "" })).toThrow(/didn't include/);
   });
 });
+
+describe("story fallback and code version", () => {
+  it("uses on-screen media when story page data isn't in a readable format", async () => {
+    const { parseCollected } = await import("../src/lib/incoming");
+    const p = parseCollected({
+      platform: "instagram", url: "https://www.instagram.com/stories/someone/123/", kind: "storypage", storyId: "123", username: "someone",
+      pageJson: [JSON.stringify({ unknown_format: { id: "123", display_url: `${CDN}/x.jpg` } })],
+      media: [{ kind: "VIDEO", url: `${CDN}/onscreen.mp4` }],
+    });
+    expect(p.items[0].url).toBe(`${CDN}/onscreen.mp4`);
+  });
+
+  it("stamps the current code version on Shortcut results", async () => {
+    const { shortcutSource, CODE_VERSION } = await import("../src/lib/bookmarklet");
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, completion: g.completion };
+    let out = "";
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    g.location = { hostname: "example.com", pathname: "/", href: "https://example.com/" };
+    g.document = { querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} } };
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = (r: string) => ((out = r), resolve());
+        new Function(shortcutSource())();
+      });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(JSON.parse(out)).toMatchObject({ keepsake: 1, v: CODE_VERSION, error: expect.stringMatching(/Instagram or Reddit/) });
+  });
+});
