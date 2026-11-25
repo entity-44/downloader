@@ -117,14 +117,15 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
         <p className="mt-1 text-muted">Once set up: open the post, story or highlight in Safari → <span className="font-medium text-[var(--text)]">Share → Save with Keepsake</span> → tap “Paste from Keepsake”. It reads the page inside your signed-in Safari, like the button.</p>
       </div>
       <Steps steps={[
-        "First, allow scripts: iPhone Settings → Apps → Shortcuts → Advanced → turn on “Allow Running Scripts”. Without this, iOS says “Cannot Run Script”.",
-        "Open the Shortcuts app and tap + to create a new shortcut. Name it “Save with Keepsake”.",
-        "Tap the ⓘ (or settings) button, turn on “Show in Share Sheet”, and under Share Sheet Types keep only “Safari web pages”.",
-        "Add the action “Run JavaScript on Web Page”. Make sure it says “on Shortcut Input” (tap it to change if needed). Tap “Copy Shortcut code” below, then replace all the code in that action with it.",
-        "Add the action “Copy to Clipboard” (it uses the JavaScript result).",
-        "Add the action “Open URLs” and set the URL to the page address below (tap “Copy page address”).",
-        "Use it: in Safari, open the post, story or highlight → Share → Save with Keepsake. The first time, allow it to run on instagram.com. Your site opens. Tap “Paste from Keepsake”.",
-        "Always start it from Safari's Share menu while the post is open, not from the Shortcuts app or the Instagram app. Those give the same “Cannot Run Script” error.",
+        "First, allow scripts: iPhone Settings → Shortcuts → Advanced → turn on “Allow Running Scripts” (on some versions: Settings → Apps → Shortcuts → Advanced).",
+        "Tap “Copy Shortcut code” below.",
+        "Open the Shortcuts app and tap + (top right).",
+        "Tap the search field at the bottom of the editor, type “Run JavaScript”, and tap “Run JavaScript on Webpage”.",
+        "Tap the action’s code box, select all the sample code, delete it, and paste the copied code.",
+        "Search “Copy to Clipboard” and tap it to add it under the first action.",
+        "Search “Open URLs”, add it, and set its URL to the page address below (type it or tap “Copy page address”).",
+        "Tap the Details button, turn on “Show in Share Sheet”. In the Receive row that appears, deselect every type except “Safari webpages”. Tap Done, then Done again to save. Rename it “Save with Keepsake” if you like.",
+        "Use it: open the post, story or highlight in Safari → tap Share (in iOS 26+ it may be inside the ••• menu) → tap your shortcut. Allow it to run on instagram.com the first time, then tap “Paste from Keepsake”.",
       ]} />
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" onClick={() => copy(shortcutSource(), "code")}>{copied === "code" ? <IconCheck className="size-4" /> : <IconClipboard className="size-4" />} {copied === "code" ? "Copied" : "Copy Shortcut code"}</Button>
