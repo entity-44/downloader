@@ -93,7 +93,8 @@ export function Home() {
         <SectionTitle title="What works" />
         <ul className="grid gap-3 text-sm sm:grid-cols-2">
           {[
-            ["Instagram posts, reels, carousels & stories", "One-click button on instagram.com"],
+            ["Instagram posts, reels, carousels, stories & highlights", "One-click button on instagram.com"],
+            ["Full-size Instagram profile pictures", "Tap the button on a profile"],
             ["Reddit videos (with sound), images & galleries", "Paste a link or use the button"],
             ["v.redd.it video links", "Paste directly"],
             ["Your entire Instagram history", "Data export import"],

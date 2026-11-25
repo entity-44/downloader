@@ -20,13 +20,36 @@ export function bookmarkletSource(appUrl: string): string {
     const h = location.hostname, p = location.pathname;
     let msg;
     if (/(^|\\.)instagram\\.com$/.test(h)) {
-      const m = p.match(/\\/(?:[\\w.]+\\/)?(?:p|reel|reels|tv)\\/([\\w-]+)/), st = p.match(/\\/stories\\/[\\w.]+\\/(\\d+)/);
-      if (!m && !st) throw new Error("Open a post, reel or story first (the address should contain /p/, /reel/ or /stories/).");
-      const id = st ? st[1] : sc2id(m[1]);
-      toast("Reading post…");
-      let raw = null;
-      try { const r = await fetch("/api/v1/media/" + id + "/info/", { headers: { "x-ig-app-id": "936619743392459" }, credentials: "include" }); if (r.ok) raw = await r.json(); } catch (e) {}
-      msg = { type: "keepsake:post", platform: "instagram", url: location.href, shortcode: m ? m[1] : undefined, raw: raw, html: raw ? undefined : document.documentElement.outerHTML };
+      const get = async (u) => { try { const r = await fetch(u, { headers: { "x-ig-app-id": "936619743392459" }, credentials: "include" }); return r.ok ? await r.json() : null; } catch (e) { return null; } };
+      const userId = async (name) => { const j = await get("/api/v1/users/web_profile_info/?username=" + encodeURIComponent(name)); return { j: j, id: j && j.data && j.data.user && j.data.user.id }; };
+      const base = { type: "keepsake:post", platform: "instagram", url: location.href };
+      const hl = p.match(/\\/stories\\/highlights\\/(\\d+)/);
+      const st = !hl && p.match(/\\/stories\\/([\\w.]+)\\/(\\d+)/);
+      const su = !hl && !st && p.match(/\\/stories\\/([\\w.]+)\\/?$/);
+      const m = p.match(/\\/(?:[\\w.]+\\/)?(?:p|reel|reels|tv)\\/([\\w-]+)/);
+      const seg = p.split("/").filter(Boolean);
+      const RES = ["explore", "accounts", "direct", "reels", "stories", "p", "reel", "tv", "about", "legal", "web", "challenge", "emails", "settings", "your_activity", "notifications"];
+      toast("Reading…");
+      if (hl) {
+        const raw = await get("/api/v1/feed/reels_media/?reel_ids=highlight:" + hl[1]);
+        if (!raw) throw new Error("Couldn't read this highlight. Make sure you can see it.");
+        msg = Object.assign(base, { kind: "reel", reelLabel: "highlight_" + hl[1], raw: raw });
+      } else if (su) {
+        const u = await userId(su[1]);
+        const raw = u.id ? await get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null;
+        if (!raw) throw new Error("Couldn't read these stories. Make sure you can see them.");
+        msg = Object.assign(base, { kind: "reel", reelLabel: "stories_" + su[1], raw: raw });
+      } else if (m || st) {
+        const raw = await get("/api/v1/media/" + (st ? st[2] : sc2id(m[1])) + "/info/");
+        msg = Object.assign(base, { kind: "post", shortcode: m ? m[1] : undefined, raw: raw, html: raw ? undefined : document.documentElement.outerHTML });
+      } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0) {
+        const u = await userId(seg[0]);
+        const info = u.id ? await get("/api/v1/users/" + u.id + "/info/") : null;
+        if (!u.j && !info) throw new Error("Couldn't read this profile.");
+        msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info } });
+      } else {
+        throw new Error("Open a post, reel, story, highlight or profile first.");
+      }
     } else if (/(^|\\.)reddit\\.com$/.test(h)) {
       const m = p.match(/\\/comments\\/([a-z0-9]+)/i);
       if (!m) throw new Error("Open a Reddit post first.");

@@ -188,3 +188,54 @@ export function parseInstagramHtml(html: string, preferCode?: string): Post {
   }
   throw new UserError("Couldn't find Instagram post data in that page source. Use the one-click button instead.");
 }
+
+// ---- Story trays: highlights and a user's current stories (/api/v1/feed/reels_media/) ----
+type ReelMedia = { id?: string | number; title?: string; user?: { username?: string }; items?: V1Item[] };
+
+/** Parses a highlight or story tray; every item in it becomes a downloadable file. */
+export function parseInstagramReel(json: unknown, label: string, sourceUrl: string): Post {
+  const j = json as { reels?: Record<string, ReelMedia>; reels_media?: ReelMedia[] } | null;
+  const reel = (j?.reels && Object.values(j.reels)[0]) ?? j?.reels_media?.[0];
+  if (!reel?.items?.length) throw new UserError("There are no stories to save here (they may have expired).");
+  const items = reel.items.map(v1Media).filter((x): x is MediaItem => !!x);
+  const latest = Math.max(...reel.items.map((i) => i.taken_at ?? 0));
+  return {
+    platform: "instagram",
+    id: label.replace(/[^\w.-]/g, "_"),
+    url: sourceUrl,
+    author: reel.user?.username,
+    title: reel.title ? `Highlight: ${reel.title}` : label.startsWith("stories_") ? "Current stories" : undefined,
+    takenAt: latest ? new Date(latest * 1000).toISOString() : undefined,
+    items,
+  };
+}
+
+// ---- Profile pictures ----
+type ProfileRaw = {
+  profile?: { data?: { user?: { username?: string; full_name?: string; profile_pic_url_hd?: string; profile_pic_url?: string } } } | null;
+  info?: { user?: { username?: string; hd_profile_pic_url_info?: Candidate; hd_profile_pic_versions?: Candidate[]; profile_pic_url?: string } } | null;
+};
+
+/** Picks the largest available profile picture (usually 1080px). */
+export function parseInstagramProfile(raw: unknown, username: string, sourceUrl: string): Post {
+  const r = raw as ProfileRaw;
+  const info = r?.info?.user;
+  const prof = r?.profile?.data?.user;
+  const candidates: Candidate[] = [
+    ...(info?.hd_profile_pic_url_info?.url ? [info.hd_profile_pic_url_info] : []),
+    ...(info?.hd_profile_pic_versions ?? []),
+    ...(prof?.profile_pic_url_hd ? [{ url: prof.profile_pic_url_hd, width: 320 }] : []),
+    ...(prof?.profile_pic_url ? [{ url: prof.profile_pic_url, width: 150 }] : []),
+  ];
+  const pic = best(candidates);
+  if (!pic) throw new UserError("Couldn't find this profile's picture.");
+  const name = info?.username ?? prof?.username ?? username;
+  return {
+    platform: "instagram",
+    id: `profile_${name}`,
+    url: sourceUrl,
+    author: name,
+    title: prof?.full_name ? `Profile picture: ${prof.full_name}` : "Profile picture",
+    items: [{ kind: "IMAGE", url: pic.url, width: pic.width, height: pic.height }],
+  };
+}

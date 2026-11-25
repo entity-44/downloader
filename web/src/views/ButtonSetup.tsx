@@ -33,6 +33,7 @@ export function ButtonSetup() {
             <IconLink className="size-5" /> Save to Keepsake
           </a>
           <p className="max-w-md text-sm text-muted">On a computer, <span className="font-medium text-[var(--text)]">drag this button to your bookmarks bar</span>. On a phone, follow the steps below.</p>
+          <p className="max-w-md text-xs text-muted">Already installed an older button? Replace it with this one to get highlights and profile pictures.</p>
           <Button size="sm" onClick={copy}>{copied ? <IconCheck className="size-4 text-emerald-500" /> : <IconClipboard className="size-4" />} {copied ? "Copied" : "Copy button code"}</Button>
         </div>
       </Card>
@@ -47,7 +48,7 @@ export function ButtonSetup() {
           <Steps steps={[
             "Show your bookmarks bar (Chrome/Edge: ⌘/Ctrl + Shift + B · Safari: View → Show Favorites Bar · Firefox: View → Toolbars).",
             "Drag the “Save to Keepsake” button above onto the bar.",
-            "Open any Instagram post, reel or story (or a Reddit post) and click the bookmark.",
+            "Open any Instagram post, reel, story, highlight or profile (or a Reddit post) and click the bookmark.",
             "This page opens with the post ready to save. Allow pop-ups for instagram.com / reddit.com if asked.",
           ]} />
         )}
@@ -77,7 +78,8 @@ export function ButtonSetup() {
           <ul className="space-y-2 text-sm text-muted">
             <li>• You need to be able to see the post yourself (signed in, if it’s private and you follow it).</li>
             <li>• Keep the original tab open until downloads finish. Instagram files are sometimes fetched through it.</li>
-            <li>• It reads only the single post you’re on. It never browses, scrolls or collects anything else.</li>
+            <li>• It reads only what you’re looking at: one post, one story or highlight (all its items), or a profile picture. It never browses, scrolls or collects anything else.</li>
+            <li>• On a profile, it saves the full-size profile picture. On /stories/name/ without a specific story, it offers all of that person’s current stories.</li>
             <li>• If Instagram changes its site and the button stops working, this page is updated, so there’s nothing to reinstall.</li>
           </ul>
         </Card>

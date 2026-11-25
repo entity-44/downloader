@@ -180,3 +180,95 @@ describe("export metadata & helpers", () => {
     expect(sanitize("../../a b/c")).toBe("a_b_c");
   });
 });
+
+import { parseInstagramProfile, parseInstagramReel } from "../src/lib/instagram";
+
+describe("Instagram highlights, stories and profiles", () => {
+  const item = (pk: string, video = false) => ({
+    pk,
+    media_type: video ? 2 : 1,
+    taken_at: 1709467200 + Number(pk),
+    image_versions2: { candidates: [{ url: `${CDN}/${pk}.jpg`, width: 1080, height: 1920 }] },
+    ...(video ? { video_versions: [{ url: `${CDN}/${pk}.mp4`, width: 720, height: 1280 }] } : {}),
+  });
+
+  it("saves every item of a highlight", () => {
+    const raw = { reels: { "highlight:17900000000000000": { id: "highlight:17900000000000000", title: "Summer", user: { username: "me" }, items: [item("1"), item("2", true), item("3")] } } };
+    const p = parseInstagramReel(raw, "highlight_17900000000000000", "https://www.instagram.com/stories/highlights/17900000000000000/");
+    expect(p).toMatchObject({ id: "highlight_17900000000000000", author: "me", title: "Highlight: Summer" });
+    expect(p.items.map((i) => i.kind)).toEqual(["IMAGE", "VIDEO", "IMAGE"]);
+    expect(p.items[1].url).toBe(`${CDN}/2.mp4`);
+  });
+
+  it("handles the reels_media shape and expired trays", () => {
+    const p = parseInstagramReel({ reels_media: [{ user: { username: "friend" }, items: [item("5")] }] }, "stories_friend", "https://www.instagram.com/stories/friend/");
+    expect(p).toMatchObject({ author: "friend", title: "Current stories" });
+    expect(() => parseInstagramReel({ reels: {} }, "stories_x", "")).toThrow(/expired/);
+  });
+
+  it("picks the full-size profile picture", () => {
+    const raw = {
+      profile: { data: { user: { username: "someone", full_name: "Some One", profile_pic_url_hd: `${CDN}/320.jpg` } } },
+      info: { user: { username: "someone", hd_profile_pic_url_info: { url: `${CDN}/1080.jpg`, width: 1080, height: 1080 }, hd_profile_pic_versions: [{ url: `${CDN}/640.jpg`, width: 640, height: 640 }] } },
+    };
+    const p = parseInstagramProfile(raw, "someone", "https://www.instagram.com/someone/");
+    expect(p).toMatchObject({ id: "profile_someone", title: "Profile picture: Some One" });
+    expect(p.items).toEqual([{ kind: "IMAGE", url: `${CDN}/1080.jpg`, width: 1080, height: 1080 }]);
+    // Falls back to the 320px picture when the detailed info isn't available.
+    expect(parseInstagramProfile({ profile: raw.profile, info: null }, "someone", "").items[0].url).toBe(`${CDN}/320.jpg`);
+    expect(() => parseInstagramProfile({}, "x", "")).toThrow();
+  });
+});
+
+describe("bookmarklet page detection", () => {
+  // Runs the real bookmarklet against a fake page and records which endpoints it calls.
+  async function run(pathname: string, responses: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    let opened: string | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" } as unknown as HTMLElement & { _t?: number };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
+    g.document = { getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
+    g.window = { open: (u: string) => ((opened = u), { postMessage() {} }), addEventListener() {} };
+    g.fetch = async (u: string) => {
+      calls.push(u);
+      const key = Object.keys(responses).find((k) => u.includes(k));
+      return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
+    };
+    try {
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+    } finally {
+      Object.assign(g, saved);
+    }
+    return { calls, opened, toast: toastEl.textContent };
+  }
+
+  it("reads highlights via the story-tray endpoint", async () => {
+    const r = await run("/stories/highlights/17900000000000000/", { "reel_ids=highlight:17900000000000000": { reels: {} } });
+    expect(r.calls).toEqual(["/api/v1/feed/reels_media/?reel_ids=highlight:17900000000000000"]);
+    expect(r.opened).toBe("https://entity-44.github.io/downloader/#/receive");
+  });
+
+  it("reads a single story by its id", async () => {
+    const r = await run("/stories/someone/3312345678901234567/", { "/media/": { items: [] } });
+    expect(r.calls).toEqual(["/api/v1/media/3312345678901234567/info/"]);
+  });
+
+  it("reads all current stories when no story id is in the address", async () => {
+    const r = await run("/stories/someone/", { web_profile_info: { data: { user: { id: "42" } } }, "reel_ids=42": { reels: {} } });
+    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/feed/reels_media/?reel_ids=42"]);
+  });
+
+  it("reads full-size profile pictures on profile pages", async () => {
+    const r = await run("/someone/", { web_profile_info: { data: { user: { id: "42" } } }, "/users/42/info/": { user: {} } });
+    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/users/42/info/"]);
+  });
+
+  it("refuses non-content pages", async () => {
+    const r = await run("/explore/");
+    expect(r.calls).toEqual([]);
+    expect(r.opened).toBeNull();
+    expect(r.toast).toMatch(/Open a post, reel, story, highlight or profile/);
+  });
+});
