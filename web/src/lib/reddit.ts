@@ -227,3 +227,10 @@ export async function fetchRedditPost(id: string, clientId: string, fetcher: typ
   if (!res.ok) throw new UserError(`Reddit returned an error (${res.status}).`);
   return parseRedditJson(await res.json());
 }
+
+/** Every resolution a Reddit video offers (audio is merged at download time). */
+export async function redditVideoVariants(dashUrl: string, fetcher: typeof fetch = fetch): Promise<Array<{ url: string; height?: number }>> {
+  const res = await fetcher(dashUrl, { credentials: "omit" });
+  if (!res.ok) return [];
+  return parseDashManifest(await res.text(), dashUrl).videos.map((v) => ({ url: v.url, height: v.height || undefined }));
+}

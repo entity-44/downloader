@@ -1,4 +1,4 @@
-import { UserError, type MediaItem, type Post } from "./types";
+import { UserError, type MediaItem, type Post, type Variant } from "./types";
 
 const HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com", "instagr.am", "www.instagr.am"]);
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -69,11 +69,25 @@ type V1Item = {
   carousel_media?: V1Item[];
 };
 
+/** Every distinct size, largest first. */
+function sizes(c?: Candidate[]): Variant[] {
+  const seen = new Set<string>();
+  return [...(c ?? [])]
+    .sort((a, b) => (b.width ?? 0) - (a.width ?? 0))
+    .filter((x) => {
+      const k = `${x.width}x${x.height}`;
+      if (!x.url || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((x) => ({ url: x.url, width: x.width, height: x.height }));
+}
+
 function v1Media(it: V1Item): MediaItem | null {
   const img = best(it.image_versions2?.candidates);
   const vid = best(it.video_versions);
-  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration };
-  if (img) return { kind: "IMAGE", url: img.url, width: img.width, height: img.height, thumbUrl: thumb(it.image_versions2?.candidates) };
+  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration, variants: sizes(it.video_versions) };
+  if (img) return { kind: "IMAGE", url: img.url, width: img.width, height: img.height, thumbUrl: thumb(it.image_versions2?.candidates), variants: sizes(it.image_versions2?.candidates) };
   return null;
 }
 
@@ -113,7 +127,7 @@ function gqlMedia(n: GqlNode): MediaItem | null {
   const h = n.dimensions?.height;
   const small = [...(n.display_resources ?? [])].sort((a, b) => (b.config_width ?? 0) - (a.config_width ?? 0))[0]?.src;
   if (n.is_video && n.video_url) return { kind: "VIDEO", url: n.video_url, width: w, height: h, thumbUrl: small ?? n.display_url, durationSec: n.video_duration };
-  if (n.display_url) return { kind: "IMAGE", url: n.display_url, width: w, height: h, thumbUrl: small };
+  if (n.display_url) return { kind: "IMAGE", url: n.display_url, width: w, height: h, thumbUrl: small, variants: n.display_resources?.length ? sizes(n.display_resources.map((r) => ({ url: r.src, width: r.config_width, height: (r as { config_height?: number }).config_height }))) : undefined };
   return null;
 }
 

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { downloadItem } from "../lib/fetchmedia";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
-import { UserError, type MediaItem, type Post } from "../lib/types";
+import { redditVideoVariants } from "../lib/reddit";
+import { UserError, type MediaItem, type Post, type Variant } from "../lib/types";
 import { zipAndSave } from "../lib/zipexport";
 import { IconCheck, IconDownload, IconExternal, IconImage, IconLayers, IconVideo } from "./icons";
 import { Badge, Button, Notice, Spinner, cn } from "./ui";
@@ -17,21 +18,32 @@ const ATTEST_KEY = "attested_session";
 export function PostResult({ post, onReset, resetLabel = "Start over" }: { post: Post; onReset?: () => void; resetLabel?: string }) {
   const [attested, setAttested] = useState(() => sessionStorage.getItem(ATTEST_KEY) === "1");
   const [states, setStates] = useState<Record<number, ItemState>>({});
-  const [blobs] = useState(() => new Map<number, Blob>());
+  const [blobs] = useState(() => new Map<string, Blob>());
+  // Chosen size per item (defaults to the best / HD version) and lazily loaded Reddit sizes.
+  const [choice, setChoice] = useState<Record<number, string>>({});
+  const [extra, setExtra] = useState<Record<number, Variant[]>>({});
+  const optionsFor = (i: number): Variant[] => post.items[i].variants ?? extra[i] ?? [];
+  const urlFor = (i: number) => choice[i] ?? post.items[i].url;
+  const sizeTag = (i: number) => {
+    if (!choice[i] || choice[i] === post.items[i].url) return "";
+    const v = optionsFor(i).find((o) => o.url === choice[i]);
+    return v?.width && v.height ? `_${v.width}x${v.height}` : v?.height ? `_${v.height}p` : "";
+  };
   const [zipping, setZipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ext = (b: Blob, item: MediaItem) => b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg");
-  const name = (i: number, b: Blob) => postFilename({ platform: post.platform, author: post.author, id: post.id, takenAt: post.takenAt, index: i, total: post.items.length, ext: ext(b, post.items[i]) });
+  const name = (i: number, b: Blob) => postFilename({ platform: post.platform, author: post.author, id: post.id, takenAt: post.takenAt, index: i, total: post.items.length, ext: ext(b, post.items[i]) }).replace(/(\.[^.]+)$/, `${sizeTag(i)}$1`);
   const set = (i: number, s: ItemState) => setStates((prev) => ({ ...prev, [i]: s }));
 
   async function get(i: number): Promise<Blob> {
-    const cached = blobs.get(i);
+    const key = `${i}|${urlFor(i)}`;
+    const cached = blobs.get(key);
     if (cached) return cached;
     set(i, { status: "busy", stage: "Downloading" });
     try {
-      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }));
-      blobs.set(i, r.blob);
+      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }), urlFor(i));
+      blobs.set(key, r.blob);
       set(i, { status: "done", note: r.note });
       return r.blob;
     } catch (e) {
@@ -75,6 +87,40 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
     setAttested(v);
     if (v) sessionStorage.setItem(ATTEST_KEY, "1");
     else sessionStorage.removeItem(ATTEST_KEY);
+  };
+
+  const label = (o: Variant) => (o.width && o.height ? `${o.width}×${o.height}` : o.height ? `${o.height}p` : "Original");
+  const quality = (i: number) => {
+    const it = post.items[i];
+    const opts = optionsFor(i);
+    if (opts.length > 1) {
+      return (
+        <div className="px-2 pt-2">
+          <select aria-label="Quality" className="input h-8 py-0 text-xs" value={urlFor(i)} onChange={(e) => setChoice((c) => ({ ...c, [i]: e.target.value }))}>
+            {opts.map((o, k) => (
+              <option key={o.url} value={o.url}>{label(o)}{k === 0 ? " · HD (best)" : ""}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+    if (it.dashUrl && !extra[i]) {
+      return (
+        <div className="px-2 pt-2">
+          <button
+            className="text-xs text-muted underline-offset-4 hover:underline"
+            onClick={async () => {
+              const v = await redditVideoVariants(it.dashUrl!).catch(() => []);
+              setExtra((x) => ({ ...x, [i]: v.length ? v : [{ url: it.url, height: it.height }] }));
+              if (v.length) setChoice((c) => ({ ...c, [i]: v[0].url }));
+            }}
+          >
+            Other qualities…
+          </button>
+        </div>
+      );
+    }
+    return null;
   };
 
   const busy = zipping || Object.values(states).some((s) => s.status === "busy");
@@ -124,6 +170,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
                       </div>
                     )}
                   </div>
+                  {quality(i)}
                   {multi && (
                     <div className="flex items-center justify-between gap-1 p-2">
                       <a href={it.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-[var(--surface-2)]" title="Open the original file">

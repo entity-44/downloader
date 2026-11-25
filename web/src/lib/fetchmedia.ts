@@ -42,9 +42,9 @@ export async function fetchFile(url: string, fetcher: typeof fetch = fetch): Pro
 export type Progress = (stage: string, fraction?: number) => void;
 
 /** Downloads one item, merging Reddit's separate audio track when present. */
-export async function downloadItem(item: MediaItem, onProgress?: Progress): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
+export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
   onProgress?.("Downloading");
-  const video = await fetchFile(item.url);
+  const video = await fetchFile(url);
   const sn = await sniffBlob(video);
   if (!sn) throw new UserError("The downloaded file isn't a supported image or video.");
   if (item.kind !== "VIDEO" || !item.dashUrl || item.hasAudio === false) return { blob: new Blob([video], { type: sn.mime }), mergedAudio: false };

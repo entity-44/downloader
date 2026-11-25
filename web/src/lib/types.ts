@@ -10,7 +10,11 @@ export type MediaItem = {
   dashUrl?: string;
   hasAudio?: boolean;
   durationSec?: number;
+  /** Other sizes available, largest first (the first equals url). */
+  variants?: Variant[];
 };
+
+export type Variant = { url: string; width?: number; height?: number };
 
 export type Post = {
   platform: "instagram" | "reddit";

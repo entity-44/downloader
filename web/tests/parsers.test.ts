@@ -50,10 +50,14 @@ describe("Instagram", () => {
     const p = parseInstagramJson(v1);
     expect(p).toMatchObject({ platform: "instagram", id: "CARO00001xy", author: "someone", caption: "Weekend 🌊", url: "https://www.instagram.com/p/CARO00001xy/" });
     expect(p.takenAt).toBe("2024-03-03T12:00:00.000Z");
-    expect(p.items).toEqual([
+    expect(p.items).toMatchObject([
       { kind: "IMAGE", url: `${CDN}/big.jpg`, width: 1440, height: 1440, thumbUrl: `${CDN}/big.jpg` },
       { kind: "VIDEO", url: `${CDN}/high.mp4`, width: 720, height: 1280, thumbUrl: `${CDN}/vthumb.jpg`, durationSec: 12.4 },
     ]);
+    // Every size is offered, largest (HD) first; the default download is the first.
+    expect(p.items[0].variants?.map((v) => v.width)).toEqual([1440, 320, 150]);
+    expect(p.items[1].variants?.map((v) => v.url)).toEqual([`${CDN}/high.mp4`, `${CDN}/low.mp4`]);
+    expect(p.items[0].variants?.[0].url).toBe(p.items[0].url);
   });
 
   it("parses single reels and GraphQL shapes", () => {
@@ -420,5 +424,32 @@ describe("iOS Shortcut", () => {
     expect(src).not.toContain("\n");
     expect(() => new Function(src)).not.toThrow();
     expect(src).toContain("completion(");
+  });
+});
+
+describe("quality options", () => {
+  it("lists every Reddit resolution from the manifest, best first", async () => {
+    const { redditVideoVariants } = await import("../src/lib/reddit");
+    const mpd = `<MPD><AdaptationSet contentType="video"><Representation height="480" bandwidth="1"><BaseURL>DASH_480.mp4</BaseURL></Representation><Representation height="1080" bandwidth="3"><BaseURL>DASH_1080.mp4</BaseURL></Representation><Representation height="720" bandwidth="2"><BaseURL>DASH_720.mp4</BaseURL></Representation></AdaptationSet><AdaptationSet contentType="audio"><Representation bandwidth="1"><BaseURL>DASH_AUDIO_128.mp4</BaseURL></Representation></AdaptationSet></MPD>`;
+    const v = await redditVideoVariants("https://v.redd.it/x1/DASHPlaylist.mpd", (async () => new Response(mpd)) as typeof fetch);
+    expect(v.map((x) => x.height)).toEqual([1080, 720, 480]);
+    expect(v[0].url).toBe("https://v.redd.it/x1/DASH_1080.mp4");
+  });
+
+  it("downloads the chosen size instead of the default", async () => {
+    const { downloadItem } = await import("../src/lib/fetchmedia");
+    const seen: string[] = [];
+    const g = globalThis as unknown as { fetch: typeof fetch };
+    const saved = g.fetch;
+    g.fetch = (async (u: string) => {
+      seen.push(String(u));
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { headers: { "content-type": "image/jpeg" } });
+    }) as typeof fetch;
+    try {
+      await downloadItem({ kind: "IMAGE", url: `${CDN}/big.jpg` }, undefined, `${CDN}/small.jpg`);
+    } finally {
+      g.fetch = saved;
+    }
+    expect(seen).toEqual([`${CDN}/small.jpg`]);
   });
 });
