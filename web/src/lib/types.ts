@@ -18,7 +18,7 @@ export type MediaItem = {
 export type Variant = { url: string; width?: number; height?: number; audioUrl?: string };
 
 export type Post = {
-  platform: "instagram" | "reddit";
+  platform: "instagram" | "reddit" | "x" | "redgifs";
   id: string;
   url: string;
   author?: string;

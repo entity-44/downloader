@@ -5,7 +5,7 @@ import { parseDashManifest } from "./reddit";
 import { sniffBlob } from "./sniff";
 import { UserError, type MediaItem } from "./types";
 
-const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com)$/i;
+const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net)$/i;
 
 function assertAllowed(url: string) {
   const u = new URL(url);

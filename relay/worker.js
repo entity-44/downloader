@@ -7,10 +7,13 @@
  *
  * It only accepts requests from the Keepsake site's origin, only fetches from
  * the media CDNs below over HTTPS, never sends cookies or credentials, and
- * does not look up posts or call any private API.
+ * It can also look up public post data from two public sources, by ID only:
+ *  - /tweet?id=   X's public embed data (cdn.syndication.twimg.com, used by embedded tweets)
+ *  - /redgifs?id= RedGIFs' public API (anonymous temporary token, as their site uses)
+ * It never calls Instagram's private API.
  */
 const ALLOWED_ORIGINS = new Set(["https://entity-44.github.io", "http://localhost:5173", "http://localhost:4173"]);
-const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com)$/i;
+const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net)$/i;
 const OK_TYPES = /^(image|video|audio)\/|dash\+xml|octet-stream|binary/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 
@@ -35,6 +38,51 @@ function corsHeaders(origin) {
   };
 }
 
+/** Pixiv's image server only serves files to requests coming from pixiv.net. */
+function upstreamHeaders(u) {
+  const h = { "User-Agent": UA, Accept: "image/*,video/*,audio/*,application/dash+xml,*/*;q=0.5" };
+  if (/(^|\.)pximg\.net$/i.test(u.hostname)) h.Referer = "https://www.pixiv.net/";
+  return h;
+}
+
+const json = (status, data, cors) => new Response(JSON.stringify(data), { status, headers: { ...cors, "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+
+/** Token formula used by X's own embed widget for the syndication endpoint. */
+function syndicationToken(id) {
+  return ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, "");
+}
+
+async function tweet(id, cors) {
+  if (!/^\d{1,25}$/.test(id)) return text(400, "Invalid post id.", cors);
+  const u = `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=en&token=${syndicationToken(id)}`;
+  const r = await fetch(u, { headers: { "User-Agent": UA, Accept: "application/json" } });
+  if (r.status === 404) return json(404, { error: "not_found" }, cors);
+  if (!r.ok) return json(502, { error: "upstream", status: r.status }, cors);
+  return json(200, await r.json(), cors);
+}
+
+let redgifsToken = null;
+async function redgifs(id, cors) {
+  if (!/^[a-z]{3,80}$/i.test(id)) return text(400, "Invalid RedGIFs id.", cors);
+  const getToken = async () => {
+    if (redgifsToken && redgifsToken.exp > Date.now()) return redgifsToken.value;
+    const t = await fetch("https://api.redgifs.com/v2/auth/temporary", { headers: { "User-Agent": UA } });
+    if (!t.ok) throw new Error("token");
+    const value = (await t.json()).token;
+    redgifsToken = { value, exp: Date.now() + 20 * 3600_000 };
+    return value;
+  };
+  let r;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    r = await fetch(`https://api.redgifs.com/v2/gifs/${id.toLowerCase()}`, { headers: { "User-Agent": UA, Authorization: `Bearer ${await getToken()}` } });
+    if (r.status !== 401) break;
+    redgifsToken = null; // expired token: get a fresh one once
+  }
+  if (r.status === 404 || r.status === 410) return json(404, { error: "not_found" }, cors);
+  if (!r.ok) return json(502, { error: "upstream", status: r.status }, cors);
+  return json(200, await r.json(), cors);
+}
+
 const text = (status, body, headers = {}) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", ...headers } });
 
 export default {
@@ -47,17 +95,19 @@ export default {
 
     const url = new URL(request.url);
     if (url.pathname === "/health") return text(200, "ok", cors);
+    if (url.pathname === "/tweet") return tweet(url.searchParams.get("id") ?? "", cors);
+    if (url.pathname === "/redgifs") return redgifs(url.searchParams.get("id") ?? "", cors);
     if (url.pathname !== "/media") return text(404, "Not found", cors);
 
     let target = allowedTarget(url.searchParams.get("u") ?? "");
-    if (!target) return text(400, "Only HTTPS media from Instagram or Reddit file servers is allowed.", cors);
+    if (!target) return text(400, "Only HTTPS media from supported file servers (Instagram, Reddit, X, RedGIFs, Pixiv) is allowed.", cors);
 
     // Follow redirects manually so every hop stays on an allowed host.
     let upstream;
     for (let hop = 0; hop < 4; hop++) {
       upstream = await fetch(target.toString(), {
         redirect: "manual",
-        headers: { "User-Agent": UA, Accept: "image/*,video/*,audio/*,application/dash+xml,*/*;q=0.5" },
+        headers: upstreamHeaders(target),
       });
       if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get("location")) {
         target = allowedTarget(new URL(upstream.headers.get("location"), target).toString());

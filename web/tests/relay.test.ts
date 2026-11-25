@@ -65,3 +65,38 @@ describe("site download fallback", () => {
     await expect(fetchFile("https://evil.com/a.jpg", fake)).rejects.toThrow(/Unexpected media host/);
   });
 });
+
+describe("relay lookups", () => {
+  it("/tweet accepts only numeric ids and calls X's public embed data", async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ __typename: "Tweet", id_str: "20" }), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", f);
+    expect((await call("/tweet?id=abc")).status).toBe(400);
+    expect((await call("/tweet?id=1;rm")).status).toBe(400);
+    const r = await call("/tweet?id=20");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBe(SITE);
+    expect(String((f.mock.calls[0] as unknown[])[0])).toMatch(/^https:\/\/cdn\.syndication\.twimg\.com\/tweet-result\?id=20&lang=en&token=/);
+  });
+
+  it("/redgifs accepts only letter ids and retries once with a fresh token", async () => {
+    let gifCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (String(u).includes("/auth/temporary")) return new Response(JSON.stringify({ token: "t" }));
+      gifCalls++;
+      return gifCalls === 1 ? new Response("", { status: 401 }) : new Response(JSON.stringify({ gif: { id: "abcdef" } }));
+    }));
+    expect((await call("/redgifs?id=abc123")).status).toBe(400);
+    const r = await call("/redgifs?id=abcdef");
+    expect(r.status).toBe(200);
+    expect(gifCalls).toBe(2);
+  });
+
+  it("sends pixiv's Referer only to pixiv's image server", async () => {
+    const f = vi.fn(async () => new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { "content-type": "image/jpeg" } }));
+    vi.stubGlobal("fetch", f);
+    await call(media("https://i.pximg.net/img-original/img/2024/01/01/00/00/00/1_p0.jpg"));
+    expect(((f.mock.calls[0] as unknown[])[1] as { headers: Record<string, string> }).headers.Referer).toBe("https://www.pixiv.net/");
+    await call(media("https://pbs.twimg.com/media/A.jpg"));
+    expect(((f.mock.calls[1] as unknown[])[1] as { headers: Record<string, string> }).headers.Referer).toBeUndefined();
+  });
+});

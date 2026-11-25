@@ -10,6 +10,7 @@ import { Badge, Button, Notice, Spinner, cn } from "./ui";
 type ItemState = { status: "idle" | "busy" | "done" | "error"; stage?: string; progress?: number; error?: string; note?: string };
 
 const ATTEST_KEY = "attested_session";
+const PLATFORM_NAME: Record<Post["platform"], string> = { instagram: "Instagram", reddit: "Reddit", x: "X", redgifs: "RedGIFs" };
 
 /** Phones that can hand files to the share sheet (iPhone: "Save Image/Video" → Photos). */
 const phone = typeof navigator !== "undefined" && typeof navigator.canShare === "function" && /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -152,8 +153,8 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
   return (
     <div className="surface rounded-2xl p-5 animate-fade-up">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Badge tone={post.platform === "reddit" ? "amber" : "violet"}>{post.platform === "reddit" ? "Reddit" : "Instagram"}</Badge>
-        {post.author && <span className="text-sm font-medium">{post.platform === "reddit" ? `u/${post.author}` : `@${post.author}`}</span>}
+        <Badge tone={post.platform === "reddit" ? "amber" : post.platform === "x" ? "neutral" : post.platform === "redgifs" ? "red" : "violet"}>{PLATFORM_NAME[post.platform]}</Badge>
+        {post.author && <span className="text-sm font-medium">{post.platform === "reddit" ? `u/${post.author}` : post.platform === "redgifs" ? post.author : `@${post.author}`}</span>}
         <span className="inline-flex items-center gap-1 text-xs text-muted">
           {multi ? <IconLayers className="size-3.5" /> : post.items[0]?.kind === "VIDEO" ? <IconVideo className="size-3.5" /> : <IconImage className="size-3.5" />}
           {multi ? `${post.items.length} items` : post.items[0]?.kind === "VIDEO" ? "Video" : "Image"}

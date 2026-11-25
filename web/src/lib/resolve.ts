@@ -1,7 +1,9 @@
 import { parseInstagramHtml, parseInstagramJson, parseInstagramUrl, parseStoryData, parseStoryUrl, type IgLink, type StoryLink } from "./instagram";
 import { fetchRedditPost, parseRedditJson, parseRedditUrl, resolveVreddit } from "./reddit";
 import { asCollected, parseCollected } from "./incoming";
+import { fetchRedgifs, parseRedgifsUrl } from "./redgifs";
 import { setting } from "./router";
+import { fetchTweet, parseXUrl } from "./x";
 import { UserError, type Post } from "./types";
 
 /** Instagram post link: the user opens a data link in their own signed-in browser and pastes the result. */
@@ -40,6 +42,11 @@ export async function resolveInput(input: string): Promise<Post> {
   }
   if (/<html|<script/i.test(text)) return parseInstagramHtml(text);
 
+  const xLink = parseXUrl(text);
+  if (xLink) return fetchTweet(xLink.id, xLink.canonicalUrl);
+  const rg = parseRedgifsUrl(text);
+  if (rg) return fetchRedgifs(rg.id, rg.canonicalUrl);
+
   const ig = parseInstagramUrl(text);
   if (ig) throw new NeedsGuidedPaste(ig);
   const story = parseStoryUrl(text);
@@ -52,7 +59,7 @@ export async function resolveInput(input: string): Promise<Post> {
     if (clientId) return fetchRedditPost(rd.id, clientId);
     throw new NeedsButton("reddit", "Open this post on reddit.com and tap the Keepsake button, or add a free Reddit client ID in Settings to paste Reddit links directly.");
   }
-  throw new UserError("Paste an Instagram or Reddit post link (or a v.redd.it video link).");
+  throw new UserError("Paste a link from Instagram, Reddit, X (Twitter) or RedGIFs.");
 }
 
 /**

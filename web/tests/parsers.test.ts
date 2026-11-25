@@ -624,3 +624,52 @@ describe("quality list cleanup", () => {
     expect(p.items[0].variants!.map((v) => v.url)).toEqual([`${CDN}/a.mp4`]);
   });
 });
+
+describe("X (Twitter)", () => {
+  it("recognizes post links", async () => {
+    const { parseXUrl } = await import("../src/lib/x");
+    expect(parseXUrl("https://x.com/someone/status/1790000000000000000?s=20")).toEqual({ id: "1790000000000000000", canonicalUrl: "https://x.com/i/status/1790000000000000000" });
+    expect(parseXUrl("twitter.com/someone/status/20/photo/1")?.id).toBe("20");
+    expect(parseXUrl("https://mobile.twitter.com/a/status/123")?.id).toBe("123");
+    expect(parseXUrl("https://x.com/someone")).toBeNull();
+    expect(parseXUrl("https://x.com.evil.com/a/status/1")).toBeNull();
+  });
+
+  it("parses photos and videos, best video quality first", async () => {
+    const { parseTweet } = await import("../src/lib/x");
+    const p = parseTweet({
+      __typename: "Tweet", id_str: "123", text: "hello", created_at: "2024-05-01T10:00:00.000Z", user: { screen_name: "someone" },
+      mediaDetails: [
+        { type: "photo", media_url_https: "https://pbs.twimg.com/media/ABC.jpg", original_info: { width: 4000, height: 3000 } },
+        { type: "video", media_url_https: "https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/t.jpg", video_info: { duration_millis: 12500, variants: [
+          { content_type: "application/x-mpegURL", url: "https://video.twimg.com/x.m3u8" },
+          { bitrate: 256000, content_type: "video/mp4", url: "https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/480x270/a.mp4" },
+          { bitrate: 2176000, content_type: "video/mp4", url: "https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1280x720/b.mp4" },
+        ] } },
+      ],
+    }, "https://x.com/i/status/123");
+    expect(p).toMatchObject({ platform: "x", author: "someone", url: "https://x.com/someone/status/123", caption: "hello" });
+    expect(p.items[0]).toMatchObject({ kind: "IMAGE", url: "https://pbs.twimg.com/media/ABC.jpg?name=orig", width: 4000 });
+    expect(p.items[1].variants?.map((v) => `${v.width}x${v.height}`)).toEqual(["1280x720", "480x270"]);
+    expect(p.items[1]).toMatchObject({ url: "https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1280x720/b.mp4", durationSec: 12.5 });
+  });
+
+  it("explains unavailable posts", async () => {
+    const { parseTweet } = await import("../src/lib/x");
+    expect(() => parseTweet({ __typename: "TweetTombstone" }, "")).toThrow(/isn't available publicly/);
+  });
+});
+
+describe("RedGIFs", () => {
+  it("recognizes links and parses HD + SD", async () => {
+    const { parseRedgifsUrl, parseRedgifs } = await import("../src/lib/redgifs");
+    expect(parseRedgifsUrl("https://www.redgifs.com/watch/SomeFancyName")).toEqual({ id: "somefancyname", canonicalUrl: "https://www.redgifs.com/watch/somefancyname" });
+    expect(parseRedgifsUrl("https://v3.redgifs.com/watch/abcdef")?.id).toBe("abcdef");
+    expect(parseRedgifsUrl("https://www.redgifs.com/ifr/abcdef")?.id).toBe("abcdef");
+    expect(parseRedgifsUrl("https://redgifs.com.evil.com/watch/abc")).toBeNull();
+    const p = parseRedgifs({ gif: { id: "abcdef", width: 1080, height: 1920, duration: 9, userName: "creator", createDate: 1700000000, urls: { hd: "https://media.redgifs.com/Abcdef.mp4", sd: "https://media.redgifs.com/Abcdef-mobile.mp4", poster: "https://media.redgifs.com/Abcdef-poster.jpg" } } }, "");
+    expect(p).toMatchObject({ platform: "redgifs", author: "creator", url: "https://www.redgifs.com/watch/abcdef" });
+    expect(p.items[0].variants?.map((v) => v.url)).toEqual(["https://media.redgifs.com/Abcdef.mp4", "https://media.redgifs.com/Abcdef-mobile.mp4"]);
+    expect(p.items[0].variants?.[1]).toMatchObject({ width: 480, height: 853 });
+  });
+});
