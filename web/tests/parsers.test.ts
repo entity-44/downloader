@@ -838,3 +838,32 @@ describe("Shortcut link contains a single address", () => {
     expect(fromPasteLink(link)).toEqual(data);
   });
 });
+
+describe("Shortcut new tab and thumbnail sizes", () => {
+  it("opens a new tab when allowed, without moving the Instagram tab", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, completion: g.completion, window: g.window };
+    let opened = "";
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    g.location = { hostname: "example.com", pathname: "/", href: "https://example.com/" };
+    g.window = { open: (u: string) => ((opened = u), {}) };
+    g.document = { querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} } };
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = () => setTimeout(resolve, 120);
+        new Function(shortcutSource())();
+      });
+      expect(opened.startsWith("https://entity-44.github.io/downloader/?paste=")).toBe(true);
+      expect((g.location as { href: string }).href).toBe("https://example.com/"); // Instagram tab untouched
+    } finally {
+      Object.assign(g, saved);
+    }
+  });
+
+  it("lists every cover image size for videos, largest first", () => {
+    const p = parseInstagramJson({ items: [{ code: "THUMBS0001", media_type: 2, video_versions: [{ url: `${CDN}/v.mp4`, width: 720, height: 1280 }], image_versions2: { candidates: [{ url: `${CDN}/c640.jpg`, width: 640, height: 1138 }, { url: `${CDN}/c1080.jpg`, width: 1080, height: 1920 }, { url: `${CDN}/c320.jpg`, width: 320, height: 569 }] } }] });
+    expect(p.items[0].thumbVariants?.map((v) => v.width)).toEqual([1080, 640, 320]);
+    expect(p.items[0].thumbUrl).toBe(`${CDN}/c1080.jpg`);
+  });
+});

@@ -12,6 +12,8 @@ export type MediaItem = {
   durationSec?: number;
   /** Other sizes available, largest first (the first equals url). */
   variants?: Variant[];
+  /** Cover/thumbnail image sizes for videos, largest first. */
+  thumbVariants?: Variant[];
 };
 
 /** A downloadable size. audioUrl: separate audio stream to merge (DASH video-only tracks). */

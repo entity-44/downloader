@@ -116,7 +116,7 @@ function videoVariants(it: V1Item): Variant[] {
 function v1Media(it: V1Item): MediaItem | null {
   const img = best(it.image_versions2?.candidates);
   const vid = best(it.video_versions);
-  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration, variants: videoVariants(it) };
+  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration, variants: videoVariants(it), thumbVariants: sizes(it.image_versions2?.candidates) };
   if (img) return { kind: "IMAGE", url: img.url, width: img.width, height: img.height, thumbUrl: thumb(it.image_versions2?.candidates), variants: sizes(it.image_versions2?.candidates) };
   return null;
 }

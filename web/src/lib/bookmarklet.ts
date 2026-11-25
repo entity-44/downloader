@@ -96,7 +96,7 @@ const COLLECT = `
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 16;
+export const CODE_VERSION = 17;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
@@ -177,7 +177,7 @@ export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/
   ${TOAST}
   ${COLLECT}
   let sent = false;
-  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; const b = btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); const link = ${PASTE} + b; completion("Opening Keepsake"); setTimeout(() => { location.href = link; }, 60); };
+  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; const b = btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); const link = ${PASTE} + b; completion("Opening Keepsake"); let nw = null; try { nw = window.open(link, "_blank"); } catch (e) {} if (!nw) setTimeout(() => { location.href = link; }, 60); };
   const guard = setTimeout(() => send({ error: "The Keepsake script took too long on this page. Try again once the post has fully loaded." }), 8000);
   try {
     const msg = await collect();

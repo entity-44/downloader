@@ -148,6 +148,33 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
     );
   };
 
+  // Video cover images: every size Instagram provides, largest first.
+  const thumbList = (i: number) => {
+    const opts = post.items[i].kind === "VIDEO" ? (post.items[i].thumbVariants ?? []) : [];
+    if (!opts.length) return null;
+    const save = async (o: Variant, k: number) => {
+      try {
+        const blob = await fetchFile(o.url);
+        const name = `keepsake_${post.platform}_${post.id}_thumbnail${k === 0 ? "" : `_${o.width ?? ""}x${o.height ?? ""}`}.jpg`;
+        if (phone) await shareFiles([{ name, blob }]);
+        else saveBlob(blob, name);
+      } catch {
+        setError("Couldn't save that thumbnail. Try again.");
+      }
+    };
+    return (
+      <div className="space-y-1.5 px-2 pb-2">
+        <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted">Thumbnail</p>
+        {opts.map((o, k) => (
+          <button key={o.url} onClick={() => save(o, k)} className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition", k === 0 ? "border border-[var(--color-accent-500)]/60 hover:bg-rose-500/10" : "border border-default hover:bg-[var(--surface-2)]")}>
+            <span>{label(o)}{k === 0 ? " · best" : ""}</span>
+            <IconImage className="size-4 shrink-0" />
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const busy = zipping || Object.values(states).some((s) => s.status === "busy");
   const multi = post.items.length > 1;
 
@@ -192,6 +219,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
                     )}
                   </div>
                   {quality(i)}
+                  {thumbList(i)}
                   {multi && (
                     <div className="flex items-center justify-between gap-1 p-2">
                       <a href={it.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:bg-[var(--surface-2)]" title="Open the original file">
@@ -307,7 +335,7 @@ function VideoPreview({ item, className, style }: { item: MediaItem; className: 
         const v = URL.createObjectURL(blob);
         urls.push(v);
         setVideoUrl(v);
-        const { thumb } = await videoThumb(blob);
+        const { thumb } = await videoThumb(blob, true);
         if (thumb && live) {
           const p = URL.createObjectURL(thumb);
           urls.push(p);

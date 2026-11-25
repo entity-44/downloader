@@ -1,8 +1,8 @@
 /** Browser-side thumbnails (replaces FFmpeg for previews). */
 const MAX = 960;
 
-async function canvasToJpeg(draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, w: number, h: number): Promise<Blob | null> {
-  const scale = Math.min(1, MAX / Math.max(w, h));
+async function canvasToJpeg(draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, w: number, h: number, maxDim = MAX, quality = 0.8): Promise<Blob | null> {
+  const scale = Math.min(1, maxDim / Math.max(w, h));
   const cw = Math.max(1, Math.round(w * scale));
   const ch = Math.max(1, Math.round(h * scale));
   const canvas = document.createElement("canvas");
@@ -11,7 +11,7 @@ async function canvasToJpeg(draw: (ctx: CanvasRenderingContext2D, w: number, h: 
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   draw(ctx, cw, ch);
-  return new Promise((r) => canvas.toBlob((b) => r(b), "image/jpeg", 0.8));
+  return new Promise((r) => canvas.toBlob((b) => r(b), "image/jpeg", quality));
 }
 
 export async function imageThumb(blob: Blob): Promise<{ thumb: Blob | null; width?: number; height?: number }> {
@@ -26,7 +26,8 @@ export async function imageThumb(blob: Blob): Promise<{ thumb: Blob | null; widt
   }
 }
 
-export function videoThumb(blob: Blob): Promise<{ thumb: Blob | null; width?: number; height?: number; durationSec?: number }> {
+/** full: capture the frame at the video's own resolution (for saving), not a small preview. */
+export function videoThumb(blob: Blob, full = false): Promise<{ thumb: Blob | null; width?: number; height?: number; durationSec?: number }> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(blob);
     const v = document.createElement("video");
@@ -48,7 +49,7 @@ export function videoThumb(blob: Blob): Promise<{ thumb: Blob | null; width?: nu
     };
     v.onseeked = async () => {
       clearTimeout(timer);
-      const thumb = await canvasToJpeg((ctx, w, h) => ctx.drawImage(v, 0, 0, w, h), v.videoWidth || 320, v.videoHeight || 240);
+      const thumb = await canvasToJpeg((ctx, w, h) => ctx.drawImage(v, 0, 0, w, h), v.videoWidth || 320, v.videoHeight || 240, full ? Infinity : MAX, full ? 0.95 : 0.8);
       finish({ thumb, width: v.videoWidth, height: v.videoHeight, durationSec: Number.isFinite(v.duration) ? v.duration : undefined });
     };
     v.onerror = () => {
