@@ -51,7 +51,7 @@ describe("Instagram", () => {
     expect(p).toMatchObject({ platform: "instagram", id: "CARO00001xy", author: "someone", caption: "Weekend 🌊", url: "https://www.instagram.com/p/CARO00001xy/" });
     expect(p.takenAt).toBe("2024-03-03T12:00:00.000Z");
     expect(p.items).toEqual([
-      { kind: "IMAGE", url: `${CDN}/big.jpg`, width: 1440, height: 1440, thumbUrl: `${CDN}/small.jpg` },
+      { kind: "IMAGE", url: `${CDN}/big.jpg`, width: 1440, height: 1440, thumbUrl: `${CDN}/big.jpg` },
       { kind: "VIDEO", url: `${CDN}/high.mp4`, width: 720, height: 1280, thumbUrl: `${CDN}/vthumb.jpg`, durationSec: 12.4 },
     ]);
   });

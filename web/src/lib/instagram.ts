@@ -50,11 +50,8 @@ export function mediaIdToShortcode(id: string): string {
 
 type Candidate = { url: string; width?: number; height?: number };
 const best = (c?: Candidate[]) => (c?.length ? [...c].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0] : undefined);
-const thumb = (c?: Candidate[]) => {
-  if (!c?.length) return undefined;
-  const sorted = [...c].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
-  return (sorted.find((x) => (x.width ?? 0) >= 320) ?? sorted[sorted.length - 1]).url;
-};
+/** Preview image: the full-resolution version, so previews stay sharp on high-density screens. */
+const thumb = (c?: Candidate[]) => best(c)?.url;
 
 // ---- v1 API shape (/api/v1/media/{id}/info/ and the post page's embedded data) ----
 type V1Item = {
@@ -114,7 +111,7 @@ type GqlNode = {
 function gqlMedia(n: GqlNode): MediaItem | null {
   const w = n.dimensions?.width;
   const h = n.dimensions?.height;
-  const small = n.display_resources?.find((r) => (r.config_width ?? 0) >= 320)?.src;
+  const small = [...(n.display_resources ?? [])].sort((a, b) => (b.config_width ?? 0) - (a.config_width ?? 0))[0]?.src;
   if (n.is_video && n.video_url) return { kind: "VIDEO", url: n.video_url, width: w, height: h, thumbUrl: small ?? n.display_url, durationSec: n.video_duration };
   if (n.display_url) return { kind: "IMAGE", url: n.display_url, width: w, height: h, thumbUrl: small };
   return null;

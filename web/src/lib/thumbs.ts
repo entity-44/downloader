@@ -1,5 +1,5 @@
 /** Browser-side thumbnails (replaces FFmpeg for previews). */
-const MAX = 480;
+const MAX = 960;
 
 async function canvasToJpeg(draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void, w: number, h: number): Promise<Blob | null> {
   const scale = Math.min(1, MAX / Math.max(w, h));
