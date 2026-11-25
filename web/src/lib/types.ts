@@ -14,7 +14,8 @@ export type MediaItem = {
   variants?: Variant[];
 };
 
-export type Variant = { url: string; width?: number; height?: number };
+/** A downloadable size. audioUrl: separate audio stream to merge (DASH video-only tracks). */
+export type Variant = { url: string; width?: number; height?: number; audioUrl?: string };
 
 export type Post = {
   platform: "instagram" | "reddit";

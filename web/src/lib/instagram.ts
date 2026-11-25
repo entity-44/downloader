@@ -1,3 +1,4 @@
+import { parseDashManifest } from "./reddit";
 import { UserError, type MediaItem, type Post, type Variant } from "./types";
 
 const HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com", "instagr.am", "www.instagr.am"]);
@@ -66,6 +67,7 @@ type V1Item = {
   image_versions2?: { candidates?: Candidate[] };
   video_versions?: Candidate[];
   video_duration?: number;
+  video_dash_manifest?: string;
   carousel_media?: V1Item[];
 };
 
@@ -83,10 +85,35 @@ function sizes(c?: Candidate[]): Variant[] {
     .map((x) => ({ url: x.url, width: x.width, height: x.height }));
 }
 
+/**
+ * Every video resolution: the ready-made files (with sound) plus the DASH
+ * manifest's video-only tracks, which get the audio track merged in on download.
+ * Largest first; for equal heights the ready-made file wins.
+ */
+function videoVariants(it: V1Item): Variant[] {
+  const muxed = sizes(it.video_versions);
+  let dash: Variant[] = [];
+  if (typeof it.video_dash_manifest === "string" && it.video_dash_manifest.includes("<MPD")) {
+    try {
+      const t = parseDashManifest(it.video_dash_manifest, "https://scontent.cdninstagram.com/");
+      const audio = t.audios[0]?.url;
+      dash = t.videos.map((v) => ({ url: v.url, width: v.width, height: v.height || undefined, audioUrl: audio }));
+    } catch {
+      /* malformed manifest: ready-made files only */
+    }
+  }
+  const byHeight = new Map<number, Variant>();
+  for (const v of [...muxed, ...dash]) {
+    const h = v.height ?? v.width ?? 0;
+    if (!byHeight.has(h)) byHeight.set(h, v);
+  }
+  return [...byHeight.entries()].sort((a, b) => b[0] - a[0]).map(([, v]) => v);
+}
+
 function v1Media(it: V1Item): MediaItem | null {
   const img = best(it.image_versions2?.candidates);
   const vid = best(it.video_versions);
-  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration, variants: sizes(it.video_versions) };
+  if (vid) return { kind: "VIDEO", url: vid.url, width: vid.width, height: vid.height, thumbUrl: thumb(it.image_versions2?.candidates), durationSec: it.video_duration, variants: videoVariants(it) };
   if (img) return { kind: "IMAGE", url: img.url, width: img.width, height: img.height, thumbUrl: thumb(it.image_versions2?.candidates), variants: sizes(it.image_versions2?.candidates) };
   return null;
 }

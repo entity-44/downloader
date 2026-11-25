@@ -68,7 +68,8 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
     if (cached) return cached;
     set(i, { status: "busy", stage: "Downloading" });
     try {
-      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }), url);
+      const audio = optionsFor(i).find((o) => o.url === url)?.audioUrl;
+      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }), url, audio);
       blobs.set(key, r.blob);
       set(i, { status: "done", note: r.note });
       return r.blob;
@@ -221,7 +222,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
                 {!zipping && <IconDownload className="size-5" />} {phone ? `Download all (${post.items.length})` : `Download all (${post.items.length}) as ZIP`}
               </Button>
             ) : (
-              <Button variant="primary" size="lg" disabled={!attested || busy} loading={states[0]?.status === "busy"} onClick={() => downloadOne(0)}>
+              <Button variant="primary" size="lg" disabled={!attested || busy} loading={states[0]?.status === "busy"} onClick={() => downloadOne(0, optionsFor(0)[0]?.url ?? post.items[0].url)}>
                 {states[0]?.status !== "busy" && (states[0]?.status === "done" ? <IconCheck className="size-5" /> : <IconDownload className="size-5" />)}
                 {states[0]?.status === "done" ? "Download again" : `Download ${post.items[0].kind === "VIDEO" ? "video" : "image"}`}
               </Button>

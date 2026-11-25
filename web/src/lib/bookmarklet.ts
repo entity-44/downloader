@@ -22,7 +22,23 @@ const COLLECT = `
       const SPAM = "Instagram flagged that request as automated, so Keepsake stopped. Wait a while before trying again. Don't retry repeatedly.";
       const hdrs = () => { const o = { "x-ig-app-id": "936619743392459", "x-requested-with": "XMLHttpRequest" }; const c = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1]; if (c) o["x-csrftoken"] = c; try { const w = sessionStorage.getItem("www-claim-v2"); if (w) o["x-ig-www-claim"] = w; } catch (e) {} return o; };
       const get = async (u) => { let j = null; try { const r = await fetch(u, { headers: hdrs(), credentials: "include" }); j = await r.json().catch(() => null); if (!r.ok && !(j && j.spam)) return null; } catch (e) { return null; } if (j && (j.spam || (j.status === "fail" && !j.items && !j.reels && !j.user && !j.data))) throw new Error(SPAM); return j; };
-      const onPage = (code) => { const out = []; document.querySelectorAll('script[type="application/json"]').forEach((s) => { const t = s.textContent || ""; if (t.length < 5e6 && (t.indexOf("image_versions2") >= 0 || t.indexOf("video_versions") >= 0) && (!code || t.indexOf(code) >= 0)) out.push(t); }); return out; };
+      const onPage = (code) => {
+        const out = [];
+        const isItem = (o) => o && typeof o === "object" && !Array.isArray(o) && (o.image_versions2 || o.video_versions || o.carousel_media || o.display_url);
+        const match = (o) => !code || o.code === code || o.shortcode === code || String(o.pk || "") === code || String(o.id || "").split("_")[0] === code;
+        const walk = (o, d) => {
+          if (!o || typeof o !== "object" || d > 40 || out.length > 20) return;
+          if (!Array.isArray(o) && Array.isArray(o.items) && o.items.length && o.items.every(isItem) && (!code || o.items.some(match))) { out.push(JSON.stringify(o)); return; }
+          if (isItem(o) && match(o)) { out.push(JSON.stringify(o)); return; }
+          for (const k in o) walk(o[k], d + 1);
+        };
+        document.querySelectorAll('script[type="application/json"]').forEach((s) => {
+          const t = s.textContent || "";
+          if (t.length > 2e7 || (t.indexOf("image_versions2") < 0 && t.indexOf("video_versions") < 0 && t.indexOf("display_url") < 0) || (code && t.indexOf(code) < 0)) return;
+          try { walk(JSON.parse(t), 0); } catch (e) {}
+        });
+        return out;
+      };
       const userId = async (name) => { const j = await get("/api/v1/users/web_profile_info/?username=" + encodeURIComponent(name)); return { j: j, id: j && j.data && j.data.user && j.data.user.id }; };
       const base = { type: "keepsake:post", platform: "instagram", url: location.href };
       const hl = p.match(/\\/stories\\/highlights\\/(\\d+)/);
@@ -129,6 +145,7 @@ export function shortcutSource(): string {
   try {
     const msg = await collect();
     msg.keepsake = 1;
+    if (msg.html) delete msg.html;
     toast("Copied for Keepsake");
     completion(JSON.stringify(msg));
   } catch (err) {

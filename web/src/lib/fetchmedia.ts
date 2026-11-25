@@ -42,11 +42,28 @@ export async function fetchFile(url: string, fetcher: typeof fetch = fetch): Pro
 export type Progress = (stage: string, fraction?: number) => void;
 
 /** Downloads one item, merging Reddit's separate audio track when present. */
-export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
+export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url, audioUrl?: string): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
   onProgress?.("Downloading");
   const video = await fetchFile(url);
   const sn = await sniffBlob(video);
   if (!sn) throw new UserError("The downloaded file isn't a supported image or video.");
+  // Video-only quality (e.g. Instagram DASH track): fetch its audio and merge.
+  if (audioUrl) {
+    onProgress?.("Downloading audio");
+    let audio: Blob | null = null;
+    try {
+      audio = await fetchFile(audioUrl);
+    } catch {
+      /* fall back to video only */
+    }
+    if (!audio) return { blob: new Blob([video], { type: "video/mp4" }), mergedAudio: false, note: "Couldn't get the audio for this quality; saved without sound. Try the HD option." };
+    onProgress?.("Merging audio and video", 0);
+    try {
+      return { blob: await mergeAudioVideo(video, audio, (p) => onProgress?.("Merging audio and video", p)), mergedAudio: true };
+    } catch {
+      return { blob: new Blob([video], { type: "video/mp4" }), mergedAudio: false, note: "Couldn't merge the audio; saved the video without sound." };
+    }
+  }
   if (item.kind !== "VIDEO" || !item.dashUrl || item.hasAudio === false) return { blob: new Blob([video], { type: sn.mime }), mergedAudio: false };
 
   let audio: Blob | null = null;

@@ -117,7 +117,7 @@ describe("Reddit", () => {
   it("parses DASH manifests (new and legacy formats)", () => {
     const modern = `<?xml version="1.0"?><MPD><Period><AdaptationSet contentType="video" mimeType="video/mp4"><Representation bandwidth="1200000" height="480" width="854" id="1"><BaseURL>DASH_480.mp4</BaseURL></Representation><Representation bandwidth="4000000" height="1080" width="1920" id="2"><BaseURL>DASH_1080.mp4</BaseURL></Representation></AdaptationSet><AdaptationSet contentType="audio" mimeType="audio/mp4"><Representation bandwidth="64000" id="3"><BaseURL>DASH_AUDIO_64.mp4</BaseURL></Representation><Representation bandwidth="128000" id="4"><BaseURL>DASH_AUDIO_128.mp4</BaseURL></Representation></AdaptationSet></Period></MPD>`;
     const t = parseDashManifest(modern, "https://v.redd.it/vid123/DASHPlaylist.mpd");
-    expect(t.videos[0]).toEqual({ url: "https://v.redd.it/vid123/DASH_1080.mp4", height: 1080, bandwidth: 4000000 });
+    expect(t.videos[0]).toEqual({ url: "https://v.redd.it/vid123/DASH_1080.mp4", height: 1080, width: 1920, bandwidth: 4000000 });
     expect(t.audios[0].url).toBe("https://v.redd.it/vid123/DASH_AUDIO_128.mp4");
     const legacy = `<MPD><Period><AdaptationSet><Representation height="720" bandwidth="2000" mimeType="video/mp4"><BaseURL>DASH_720</BaseURL></Representation></AdaptationSet><AdaptationSet><Representation mimeType="audio/mp4" bandwidth="100"><BaseURL>audio</BaseURL></Representation></AdaptationSet></Period></MPD>`;
     const l = parseDashManifest(legacy, "https://v.redd.it/old1/DASHPlaylist.mpd");
@@ -542,5 +542,78 @@ describe("iPhone pop-up rule", () => {
       Object.assign(g, saved);
     }
     expect(order[0]).toBe("open");
+  });
+});
+
+describe("Instagram reel qualities from the DASH manifest", () => {
+  const mpd = `<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011"><Period><AdaptationSet contentType="video" mimeType="video/mp4"><Representation id="1" bandwidth="4000000" width="1080" height="1920"><BaseURL>${CDN}/dash_1080.mp4?a=1&amp;b=2</BaseURL></Representation><Representation id="2" bandwidth="2000000" width="720" height="1280"><BaseURL>${CDN}/dash_720.mp4</BaseURL></Representation><Representation id="3" bandwidth="900000" width="480" height="852"><BaseURL>${CDN}/dash_480.mp4</BaseURL></Representation></AdaptationSet><AdaptationSet contentType="audio" mimeType="audio/mp4"><Representation id="4" bandwidth="128000"><BaseURL>${CDN}/dash_audio.mp4</BaseURL></Representation></AdaptationSet></Period></MPD>`;
+  const reel = {
+    items: [{
+      code: "REELQ0001", media_type: 2, user: { username: "me" },
+      image_versions2: { candidates: [{ url: `${CDN}/t.jpg`, width: 1080, height: 1920 }] },
+      video_versions: [{ url: `${CDN}/muxed_720.mp4`, width: 720, height: 1280 }, { url: `${CDN}/muxed_720b.mp4`, width: 720, height: 1280 }, { url: `${CDN}/muxed_720c.mp4`, width: 720, height: 1280 }],
+      video_dash_manifest: mpd,
+    }],
+  };
+
+  it("lists every resolution, highest first, with audio to merge for video-only tracks", () => {
+    const v = parseInstagramJson(reel).items[0].variants!;
+    expect(v.map((x) => x.height)).toEqual([1920, 1280, 852]);
+    expect(v[0]).toEqual({ url: `${CDN}/dash_1080.mp4?a=1&b=2`, width: 1080, height: 1920, audioUrl: `${CDN}/dash_audio.mp4` });
+    expect(v[1]).toEqual({ url: `${CDN}/muxed_720.mp4`, width: 720, height: 1280 }); // ready-made file wins at 720p
+    expect(v[2].audioUrl).toBe(`${CDN}/dash_audio.mp4`);
+  });
+
+  it("still works without a manifest", () => {
+    const { video_dash_manifest: _ignored, ...noDash } = reel.items[0];
+    expect(parseInstagramJson({ items: [noDash] }).items[0].variants).toHaveLength(1);
+  });
+
+  it("merges the separate audio track when downloading a video-only quality", async () => {
+    const { downloadItem } = await import("../src/lib/fetchmedia");
+    const merge = await import("../src/lib/merge");
+    const seen: string[] = [];
+    const g = globalThis as unknown as { fetch: typeof fetch };
+    const saved = g.fetch;
+    const mp4 = new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode("ftypisom"), 0, 0, 0, 0]);
+    g.fetch = (async (u: string) => (seen.push(String(u)), new Response(mp4, { headers: { "content-type": "video/mp4" } }))) as typeof fetch;
+    const spy = (await import("vitest")).vi.spyOn(merge, "mergeAudioVideo").mockResolvedValue(new Blob(["merged"], { type: "video/mp4" }));
+    try {
+      const r = await downloadItem({ kind: "VIDEO", url: `${CDN}/muxed_720.mp4` }, undefined, `${CDN}/dash_1080.mp4`, `${CDN}/dash_audio.mp4`);
+      expect(r.mergedAudio).toBe(true);
+      expect(seen).toEqual([`${CDN}/dash_1080.mp4`, `${CDN}/dash_audio.mp4`]);
+      expect(spy).toHaveBeenCalledOnce();
+    } finally {
+      g.fetch = saved;
+      spy.mockRestore();
+    }
+  });
+});
+
+describe("small payloads (Shortcut clipboard)", () => {
+  it("sends only the matching post, not the whole page data", async () => {
+    const filler = Array.from({ length: 3000 }, (_, k) => ({ code: `OTHER${k}xx`, media_type: 1, image_versions2: { candidates: [{ url: `${CDN}/o${k}.jpg`, width: 1080 }] }, caption: { text: "x".repeat(200) } }));
+    const target = { code: "TARGET0001", media_type: 1, user: { username: "me" }, image_versions2: { candidates: [{ url: `${CDN}/target.jpg`, width: 1440 }] } };
+    const page = JSON.stringify({ require: [{ feed: filler, post: { items: [target] } }] });
+    expect(page.length).toBeGreaterThan(1_000_000);
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, fetch: g.fetch, completion: g.completion };
+    let out = "";
+    g.location = { hostname: "www.instagram.com", pathname: "/p/TARGET0001/", href: "https://www.instagram.com/p/TARGET0001/" };
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    g.document = { cookie: "", querySelectorAll: () => [{ textContent: page }], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
+    g.fetch = async () => new Response("{}", { status: 404 });
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = (r: string) => ((out = r), resolve());
+        new Function(shortcutSource())();
+      });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(out.length).toBeLessThan(5_000);
+    const { resolveInput } = await import("../src/lib/resolve");
+    expect((await resolveInput(out)).items[0].url).toBe(`${CDN}/target.jpg`);
   });
 });

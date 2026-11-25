@@ -154,7 +154,7 @@ export function parseRedditJson(json: unknown): Post {
 
 // ---- DASH manifests (v.redd.it) ----
 
-export type DashTracks = { videos: Array<{ url: string; height: number; bandwidth: number }>; audios: Array<{ url: string; bandwidth: number }> };
+export type DashTracks = { videos: Array<{ url: string; height: number; width?: number; bandwidth: number }>; audios: Array<{ url: string; bandwidth: number }> };
 
 /** Minimal regex-based MPD parser (works in workers/tests without DOMParser). */
 export function parseDashManifest(xml: string, manifestUrl: string): DashTracks {
@@ -171,7 +171,7 @@ export function parseDashManifest(xml: string, manifestUrl: string): DashTracks 
       const bandwidth = Number(rep.match(/bandwidth="(\d+)"/)?.[1] ?? 0);
       const repAudio = isAudio || /mimeType="audio\//.test(rep);
       if (repAudio) out.audios.push({ url, bandwidth });
-      else out.videos.push({ url, bandwidth, height: Number(rep.match(/height="(\d+)"/)?.[1] ?? 0) });
+      else out.videos.push({ url, bandwidth, height: Number(rep.match(/height="(\d+)"/)?.[1] ?? 0), width: Number(rep.match(/\swidth="(\d+)"/)?.[1] ?? 0) || undefined });
     }
   }
   out.videos.sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth);
