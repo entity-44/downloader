@@ -684,3 +684,30 @@ describe("bookmark link is plain ASCII", () => {
     expect(href.length).toBeLessThan(9000);
   });
 });
+
+describe("story opened over a profile (address stays /username/)", () => {
+  it("detects the full-screen story and saves it instead of the profile", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, fetch: g.fetch, completion: g.completion, window: g.window };
+    let out = "";
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const storyVideo = { currentSrc: `${CDN}/story.mp4`, videoWidth: 720, videoHeight: 1280, poster: "", getBoundingClientRect: () => ({ width: 390, height: 700 }) };
+    g.location = { hostname: "www.instagram.com", pathname: "/someone/", href: "https://www.instagram.com/someone/" };
+    g.window = { innerWidth: 390, innerHeight: 844 };
+    g.document = { cookie: "", querySelectorAll: (sel: string) => (sel.includes("video") ? [storyVideo] : []), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
+    g.fetch = async () => new Response("{}", { status: 404 }); // Instagram not answering, like on the phone
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = (r: string) => ((out = r), resolve());
+        new Function(shortcutSource())();
+      });
+    } finally {
+      Object.assign(g, saved);
+    }
+    const msg = JSON.parse(out);
+    expect(msg).toMatchObject({ kind: "screen", username: "someone", media: [{ kind: "VIDEO", url: `${CDN}/story.mp4` }] });
+    const { resolveInput } = await import("../src/lib/resolve");
+    expect((await resolveInput(out)).items[0].url).toBe(`${CDN}/story.mp4`);
+  });
+});

@@ -10,7 +10,7 @@
  *  - iOS Shortcut ("Run JavaScript on Web Page"): returns the data, which the
  *    Shortcut copies to the clipboard before opening the app
  */
-const TOAST = "const toast = (m) => { let d = document.getElementById(\"__keepsake_toast\"); if (!d) { d = document.createElement(\"div\"); d.id = \"__keepsake_toast\"; d.style.cssText = \"position:fixed;z-index:2147483647;top:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font:14px system-ui,sans-serif;padding:10px 16px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);max-width:90vw\"; document.body.appendChild(d); } d.textContent = m; clearTimeout(d._t); d._t = setTimeout(() => d.remove(), 6000); };";
+const TOAST = "const toast = (m) => { let d = document.getElementById(\"__keepsake_toast\"); if (!d) { d = document.createElement(\"div\"); d.id = \"__keepsake_toast\"; d.style.cssText = \"position:fixed;z-index:2147483647;top:16px;left:8px;right:8px;background:#111;color:#fff;font:14px system-ui;padding:10px 14px;border-radius:12px\"; document.body.appendChild(d); } d.textContent = m; clearTimeout(d._t); d._t = setTimeout(() => d.remove(), 6000); };";
 
 const COLLECT = `
   const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -49,6 +49,7 @@ const COLLECT = `
       const RES = ["explore", "accounts", "direct", "reels", "stories", "p", "reel", "tv", "about", "legal", "web", "challenge", "emails", "settings", "your_activity", "notifications"];
       toast("Reading…");
       const onScreen = () => { const out = []; document.querySelectorAll("video").forEach((v) => { const s = v.currentSrc || v.src || ""; const r = v.getBoundingClientRect ? v.getBoundingClientRect() : { width: 999 }; if (/^https:/.test(s) && r.width > 150) out.push({ kind: "VIDEO", url: s, width: v.videoWidth || undefined, height: v.videoHeight || undefined, thumbUrl: v.poster || undefined }); }); document.querySelectorAll("img").forEach((i) => { const r = i.getBoundingClientRect ? i.getBoundingClientRect() : { width: 999, height: 999 }; if (r.width < 200 || r.height < 200) return; let best = i.currentSrc || i.src || "", bw = i.naturalWidth || 0; (i.srcset || "").split(",").forEach((part) => { const bits = part.trim().split(/\\s+/); const n = parseInt(bits[1] || "0", 10); if (bits[0] && n > bw) { best = bits[0]; bw = n; } }); if (/(cdninstagram\\.com|fbcdn\\.net)/.test(best)) out.push({ kind: "IMAGE", url: best, width: bw || undefined }); }); return out; };
+      const storyOpen = () => { const W = window.innerWidth || 0, H = window.innerHeight || 0; let open = false; document.querySelectorAll("video, img").forEach((e) => { const r = e.getBoundingClientRect ? e.getBoundingClientRect() : { width: 0, height: 0 }; if (W && H && r.width >= W * 0.6 && r.height >= H * 0.45) open = true; }); return open; };
       const story = async (label, viaApi, storyId, username) => {
         const extra = { reelLabel: label, storyId: storyId, username: username };
         const found = onPage(storyId || "");
@@ -71,10 +72,12 @@ const COLLECT = `
         const found = onPage(code);
         const raw = found.length ? null : await get("/api/v1/media/" + sc2id(code) + "/info/");
         msg = Object.assign(base, { kind: "post", shortcode: code, pageJson: found.length ? found : undefined, raw: raw, html: found.length || raw ? undefined : document.documentElement.outerHTML });
+      } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0 && storyOpen()) {
+        msg = await story("stories_" + seg[0], async () => { const u = await userId(seg[0]); return u.id ? get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null; }, undefined, seg[0]);
       } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0) {
         const u = await userId(seg[0]);
         const info = u.id ? await get("/api/v1/users/" + u.id + "/info/") : null;
-        if (!u.j && !info) throw new Error("Couldn't read this profile.");
+        if (!u.j && !info) throw new Error("Couldn't read this profile. If you're watching a story, let it start playing, then try again.");
         msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info } });
       } else {
         throw new Error("Open a post, reel, story, highlight or profile first.");
@@ -112,18 +115,6 @@ export function bookmarkletSource(appUrl: string): string {
     window.addEventListener("message", async (e) => {
       if (e.source !== w || e.origin !== ORIGIN || !e.data || typeof e.data.type !== "string") return;
       if (e.data.type === "keepsake:ready") { await done; w.postMessage(msg, ORIGIN); }
-      if (e.data.type === "keepsake:fetch") {
-        try {
-          const u = new URL(e.data.url);
-          if (!/(^|\\.)(cdninstagram\\.com|fbcdn\\.net|redd\\.it)$/.test(u.hostname) || u.protocol !== "https:") throw new Error("Blocked host");
-          const r = await fetch(u, { credentials: "omit" });
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          const b = await r.arrayBuffer();
-          w.postMessage({ type: "keepsake:file", reqId: e.data.reqId, buffer: b, mime: r.headers.get("content-type") || "" }, ORIGIN, [b]);
-        } catch (err) {
-          w.postMessage({ type: "keepsake:file-error", reqId: e.data.reqId, error: String(err && err.message || err) }, ORIGIN);
-        }
-      }
     });
   } catch (err) {
     toast("Keepsake: " + (err && err.message || err));

@@ -1,4 +1,3 @@
-import { bridgeAvailable, bridgeFetch } from "./bridge";
 import { RELAY_URL } from "./config";
 import { mergeAudioVideo } from "./merge";
 import { parseDashManifest } from "./reddit";
@@ -29,13 +28,12 @@ export async function fetchFile(url: string, fetcher: typeof fetch = fetch): Pro
       const res = await fetcher(`${RELAY_URL}/media?u=${encodeURIComponent(url)}`, { credentials: "omit" });
       if (res.ok) return await res.blob();
       if (res.status === 404 || res.status === 403 || res.status === 410) {
-        if (!bridgeAvailable()) throw expired();
+        throw expired();
       }
     } catch (e) {
       if (e instanceof UserError) throw e;
     }
   }
-  if (bridgeAvailable()) return bridgeFetch(url);
   throw new UserError("Couldn't download this file right now. Use “Open file” to save it from Instagram directly, or tap the button on the post again.");
 }
 
