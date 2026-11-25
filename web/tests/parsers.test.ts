@@ -691,7 +691,7 @@ describe("story opened over a profile (address stays /username/)", () => {
     const saved = { location: g.location, document: g.document, fetch: g.fetch, completion: g.completion, window: g.window };
     let out = "";
     const toastEl = { style: {}, remove() {}, textContent: "" };
-    const storyVideo = { currentSrc: `${CDN}/story.mp4`, videoWidth: 720, videoHeight: 1280, poster: "", getBoundingClientRect: () => ({ width: 390, height: 700 }) };
+    const storyVideo = { currentSrc: `${CDN}/story.mp4`, videoWidth: 720, videoHeight: 1280, poster: "", paused: false, getBoundingClientRect: () => ({ width: 390, height: 700, left: 0, right: 390, top: 72, bottom: 772 }) };
     g.location = { hostname: "www.instagram.com", pathname: "/someone/", href: "https://www.instagram.com/someone/" };
     g.window = { innerWidth: 390, innerHeight: 844 };
     g.document = { cookie: "", querySelectorAll: (sel: string) => (sel.includes("video") ? [storyVideo] : []), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
@@ -709,5 +709,47 @@ describe("story opened over a profile (address stays /username/)", () => {
     expect(msg).toMatchObject({ kind: "screen", username: "someone", media: [{ kind: "VIDEO", url: `${CDN}/story.mp4` }] });
     const { resolveInput } = await import("../src/lib/resolve");
     expect((await resolveInput(out)).items[0].url).toBe(`${CDN}/story.mp4`);
+  });
+});
+
+describe("never the wrong video", () => {
+  const reel = (code: string) => ({ code, media_type: 2, video_versions: [{ url: `${CDN}/${code}.mp4`, width: 720, height: 1280 }], image_versions2: { candidates: [{ url: `${CDN}/${code}.jpg`, width: 720 }] } });
+
+  it("picks the exact reel when the page holds several", async () => {
+    const { parseCollected } = await import("../src/lib/incoming");
+    const page = JSON.stringify({ items: [reel("NEXTREEL01"), reel("MYREEL0001"), reel("OTHERREEL1")] });
+    const p = parseCollected({ platform: "instagram", url: "https://www.instagram.com/reel/MYREEL0001/", kind: "post", shortcode: "MYREEL0001", pageJson: [page] });
+    expect(p.items[0].url).toBe(`${CDN}/MYREEL0001.mp4`);
+  });
+
+  it("refuses to guess when the exact reel isn't there", async () => {
+    const { parseCollected } = await import("../src/lib/incoming");
+    const page = JSON.stringify({ items: [reel("NEXTREEL01")] });
+    expect(() => parseCollected({ platform: "instagram", url: "", kind: "post", shortcode: "MYREEL0001", pageJson: [page] })).toThrow(/exact post/);
+  });
+
+  it("takes the story playing at the centre, not preloaded neighbours", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, fetch: g.fetch, completion: g.completion, window: g.window };
+    let out = "";
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const at = (left: number) => () => ({ width: 390, height: 700, left, right: left + 390, top: 72, bottom: 772 });
+    const prev = { currentSrc: `${CDN}/prev.mp4`, paused: true, getBoundingClientRect: at(-390) };
+    const current = { currentSrc: `${CDN}/current.mp4`, paused: false, videoWidth: 720, videoHeight: 1280, getBoundingClientRect: at(0) };
+    const next = { currentSrc: `${CDN}/next.mp4`, paused: true, getBoundingClientRect: at(390) };
+    g.location = { hostname: "www.instagram.com", pathname: "/stories/someone/", href: "https://www.instagram.com/stories/someone/" };
+    g.window = { innerWidth: 390, innerHeight: 844 };
+    g.document = { cookie: "", querySelectorAll: (sel: string) => (sel === "video" ? [prev, next, current] : sel === "img" ? [] : []), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
+    g.fetch = async () => new Response("{}", { status: 404 });
+    const { shortcutSource } = await import("../src/lib/bookmarklet");
+    try {
+      await new Promise<void>((resolve) => {
+        g.completion = (r: string) => ((out = r), resolve());
+        new Function(shortcutSource())();
+      });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(JSON.parse(out).media).toEqual([{ kind: "VIDEO", url: `${CDN}/current.mp4`, width: 720, height: 1280 }]);
   });
 });

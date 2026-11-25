@@ -283,9 +283,26 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
 
 /** Post data the bookmarklet found already embedded in the page (no extra request made). */
 export function parsePageJson(blocks: string[], sourceUrl: string, shortcode?: string): Post {
-  for (const b of blocks) {
+  const parsed = blocks.map((b) => {
     try {
-      return parseInstagramJson(JSON.parse(b), sourceUrl, shortcode);
+      return JSON.parse(b) as unknown;
+    } catch {
+      return null;
+    }
+  });
+  // Pages often hold several posts (e.g. the next reels): only accept the exact one.
+  if (shortcode) {
+    for (const j of parsed) {
+      const v1 = deepFind(j, (o): o is V1Item => isV1Item(o) && (o as V1Item).code === shortcode);
+      if (v1) return fromV1(v1, sourceUrl);
+      const g = deepFind(j, (o): o is GqlNode => isGql(o) && (o as GqlNode).shortcode === shortcode);
+      if (g) return fromGql(g);
+    }
+    throw new UserError("Couldn't find this exact post on the page. Reload the post on Instagram (so it's the only one open) and try again.");
+  }
+  for (const j of parsed) {
+    try {
+      return parseInstagramJson(j, sourceUrl);
     } catch {
       /* try the next block */
     }
