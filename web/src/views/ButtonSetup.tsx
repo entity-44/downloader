@@ -123,7 +123,7 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
         "Tap the search field at the bottom of the editor, type “Run JavaScript”, and tap “Run JavaScript on Webpage”.",
         "Tap the action’s code box and delete ALL of Apple’s sample code first (it must be completely empty), then paste. Check: the box should now start with ;(async and end with })(); with nothing before or after.",
         "Search “Copy to Clipboard” and tap it to add it under the first action.",
-        "Search “Open URLs”, add it, and set its URL to the page address below (type it or tap “Copy page address”).",
+        "Search “Open URLs” and add it. Shortcuts pre-fills its URL with a blue token (like “Clipboard”): tap it and delete it, then type the page address below. If the token stays, nothing opens.",
         "Tap the Details button, turn on “Show in Share Sheet”. In the Receive row that appears, deselect every type except “Safari webpages”. Tap Done, then Done again to save. Rename it “Save with Keepsake” if you like.",
         "Use it: open the post, story or highlight in Safari → tap Share (in iOS 26+ it may be inside the ••• menu) → tap your shortcut. Allow it to run on instagram.com the first time, then tap “Paste from Keepsake”.",
       ]} />
