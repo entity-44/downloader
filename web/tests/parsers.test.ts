@@ -404,10 +404,11 @@ describe("iOS Shortcut", () => {
     const { shortcutSource } = await import("../src/lib/bookmarklet");
     try {
       await new Promise<void>((resolve) => {
-        g.completion = (r: string) => {
-          result = r;
-          resolve();
-        };
+        g.completion = () =>
+          setTimeout(() => {
+            result = String((g.location as { href: string }).href);
+            resolve();
+          }, 120);
         new Function(shortcutSource())();
       });
     } finally {
@@ -617,7 +618,7 @@ describe("small payloads (Shortcut clipboard)", () => {
     const { shortcutSource } = await import("../src/lib/bookmarklet");
     try {
       await new Promise<void>((resolve) => {
-        g.completion = (r: string) => ((out = r), resolve());
+        g.completion = () => setTimeout(() => ((out = String((g.location as { href: string }).href)), resolve()), 120);
         new Function(shortcutSource())();
       });
     } finally {
@@ -708,7 +709,7 @@ describe("story opened over a profile (address stays /username/)", () => {
     const { shortcutSource } = await import("../src/lib/bookmarklet");
     try {
       await new Promise<void>((resolve) => {
-        g.completion = (r: string) => ((out = r), resolve());
+        g.completion = () => setTimeout(() => ((out = String((g.location as { href: string }).href)), resolve()), 120);
         new Function(shortcutSource())();
       });
     } finally {
@@ -753,7 +754,7 @@ describe("never the wrong video", () => {
     const { shortcutSource } = await import("../src/lib/bookmarklet");
     try {
       await new Promise<void>((resolve) => {
-        g.completion = (r: string) => ((out = r), resolve());
+        g.completion = () => setTimeout(() => ((out = String((g.location as { href: string }).href)), resolve()), 120);
         new Function(shortcutSource())();
       });
     } finally {
@@ -792,7 +793,7 @@ describe("story fallback and code version", () => {
     g.document = { querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} } };
     try {
       await new Promise<void>((resolve) => {
-        g.completion = (r: string) => ((out = r), resolve());
+        g.completion = () => setTimeout(() => ((out = String((g.location as { href: string }).href)), resolve()), 120);
         new Function(shortcutSource())();
       });
     } finally {

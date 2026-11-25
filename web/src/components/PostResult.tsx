@@ -283,7 +283,8 @@ function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
   if (stage === "failed") {
     return <div className="grid size-full min-h-48 place-items-center text-muted">{item.kind === "VIDEO" ? <IconVideo className="size-8" /> : <IconImage className="size-8" />}</div>;
   }
-  if (imageUrl) return <img src={blobUrl ?? imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className={cls} style={style} onError={onError} />;
+  // WebkitTouchCallout: keep iPhone's tap-and-hold menu (Save to Photos, Copy, Share).
+  if (imageUrl) return <img src={blobUrl ?? imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" draggable className={cls} style={{ ...style, WebkitTouchCallout: "default", userSelect: "auto" }} onError={onError} />;
   return <VideoPreview item={item} className={cls} style={style} />;
 }
 
@@ -295,6 +296,7 @@ function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
 function VideoPreview({ item, className, style }: { item: MediaItem; className: string; style?: React.CSSProperties }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [poster, setPoster] = useState<string | null>(null);
+  const [posterBlob, setPosterBlob] = useState<Blob | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
@@ -310,6 +312,7 @@ function VideoPreview({ item, className, style }: { item: MediaItem; className: 
           const p = URL.createObjectURL(thumb);
           urls.push(p);
           setPoster(p);
+          setPosterBlob(thumb);
         }
       })
       .catch(() => live && setFailed(true));
@@ -320,5 +323,20 @@ function VideoPreview({ item, className, style }: { item: MediaItem; className: 
   }, [item.url]);
   if (failed) return <div className="grid size-full min-h-48 place-items-center text-muted"><IconVideo className="size-8" /></div>;
   if (!videoUrl) return <div className="grid size-full min-h-48 place-items-center text-muted"><Spinner /></div>;
-  return <video src={videoUrl} poster={poster ?? undefined} controls muted playsInline preload="metadata" className={className} style={style} />;
+  const saveThumb = () => {
+    if (!posterBlob) return;
+    const name = "keepsake_thumbnail.jpg";
+    if (phone) void shareFiles([{ name, blob: posterBlob }]);
+    else saveBlob(posterBlob, name);
+  };
+  return (
+    <div className="relative w-full">
+      <video src={videoUrl} poster={poster ?? undefined} controls muted playsInline preload="metadata" className={className} style={style} />
+      {posterBlob && (
+        <button onClick={saveThumb} className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-lg bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur hover:bg-black/75">
+          <IconImage className="size-3.5" /> Save thumbnail
+        </button>
+      )}
+    </div>
+  );
 }
