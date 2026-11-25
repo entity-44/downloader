@@ -73,7 +73,17 @@ export function fromPasteLink(text: string): unknown | undefined {
   // "?paste=<data>" (current) or "#/paste/<data>" (earlier); Shortcuts may encode "#" as %23.
   const m = text.match(/(?:[?&]paste=|(?:#|%23)\/paste\/)([^\s&]+)/);
   if (!m) return undefined;
-  // The data may have been percent-encoded more than once along the way.
+  // Current Shortcut code sends base64url (only letters, digits, "-" and "_").
+  if (/^[A-Za-z0-9_-]{8,}$/.test(m[1])) {
+    try {
+      const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+      return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+    } catch {
+      /* not base64 JSON: fall through */
+    }
+  }
+  // Older codes: the data may have been percent-encoded more than once along the way.
   let v = m[1];
   for (let i = 0; i < 4; i++) {
     try {

@@ -12,8 +12,10 @@ const CDN = "https://scontent-lax3-1.cdninstagram.com/v/t51";
 /** The Shortcut returns a link to the paste page with the data inside it. */
 const decodeShortcut = (link: string) => {
   expect(link.startsWith("https://entity-44.github.io/downloader/?paste=")).toBe(true);
-  expect(link).not.toContain("#");
-  return JSON.parse(decodeURIComponent(link.split("?paste=")[1]));
+  // Only one address for Shortcuts to find: the data is letters, digits, "-" and "_".
+  expect(/^[A-Za-z0-9_-]+$/.test(link.split("?paste=")[1])).toBe(true);
+  const b64 = link.split("?paste=")[1].replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
 };
 
 describe("Instagram", () => {
@@ -822,5 +824,16 @@ describe("Shortcut link survives Shortcuts' re-encoding", () => {
     ]) {
       expect(fromPasteLink(link)).toEqual(data);
     }
+  });
+});
+
+describe("Shortcut link contains a single address", () => {
+  it("decodes base64url data, including non-English text", async () => {
+    const { fromPasteLink } = await import("../src/lib/incoming");
+    const data = { keepsake: 1, platform: "instagram", url: "https://www.instagram.com/stories/a/", caption: "Café 🎉" };
+    const b64 = Buffer.from(JSON.stringify(data), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const link = `https://entity-44.github.io/downloader/?paste=${b64}`;
+    expect((link.match(/https?:|www\.|\.com/g) ?? []).length).toBe(1); // only the site's own "https:"
+    expect(fromPasteLink(link)).toEqual(data);
   });
 });
