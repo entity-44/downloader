@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { IconArchive, IconClipboard, IconDownload, IconLink, IconChevronRight } from "../components/icons";
+import { IconArchive, IconClipboard, IconDownload, IconLink, IconChevronRight, IconX } from "../components/icons";
 import { PostResult } from "../components/PostResult";
 import { Badge, Button, Card, Notice, SectionTitle } from "../components/ui";
 import { GuidedPaste } from "../components/GuidedPaste";
@@ -63,22 +63,42 @@ export function Home() {
         </p>
         <form onSubmit={submit} className="surface mt-8 animate-fade-up rounded-2xl p-2 text-left shadow-xl shadow-black/[0.04] [animation-delay:120ms] sm:p-2.5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="relative flex flex-1 items-center">
-              <span className="sr-only">Post link or pasted data</span>
+            <div className="relative flex flex-1 items-center">
               <IconLink className="pointer-events-none absolute left-3.5 size-5 text-muted" />
               <input
                 ref={inputRef}
-                className="h-12 w-full rounded-xl bg-transparent pl-11 pr-24 text-base outline-none placeholder:text-[var(--muted)] sm:h-14"
+                aria-label="Post link"
+                className="h-12 w-full select-text rounded-xl bg-transparent pl-11 pr-24 text-base outline-none placeholder:text-[var(--muted)] sm:h-14"
                 placeholder="Paste an Instagram or Reddit link…"
+                type="text"
+                inputMode="url"
                 autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
                 spellCheck={false}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
               />
-              <button type="button" onClick={paste} className="absolute right-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-[var(--surface-2)] hover:text-[var(--text)]">
-                <IconClipboard className="size-4" /> Paste
-              </button>
-            </label>
+              {input ? (
+                <button
+                  type="button"
+                  aria-label="Clear"
+                  onClick={() => {
+                    setInput("");
+                    setError(null);
+                    inputRef.current?.focus();
+                  }}
+                  className="absolute right-2 grid size-8 place-items-center rounded-lg text-muted transition hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                >
+                  <IconX className="size-4" />
+                </button>
+              ) : (
+                <button type="button" onClick={paste} className="absolute right-2 inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted transition hover:bg-[var(--surface-2)] hover:text-[var(--text)]">
+                  <IconClipboard className="size-4" /> Paste
+                </button>
+              )}
+            </div>
             <Button type="submit" variant="primary" size="lg" className="h-12 sm:h-14 sm:px-8" loading={busy} disabled={!input.trim()}>
               {!busy && <IconDownload className="size-5" />} Download
             </Button>

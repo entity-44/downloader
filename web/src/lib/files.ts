@@ -14,7 +14,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 export const dateStamp = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 
 export function postFilename(o: { platform: string; author?: string; id: string; takenAt?: string; index: number; total: number; ext: string }) {
-  const parts = [o.platform];
+  const parts = ["keepsake", o.platform];
   if (o.author) parts.push(sanitize(o.author, 30));
   parts.push(sanitize(o.id, 40));
   if (o.takenAt) parts.push(dateStamp(new Date(o.takenAt)));

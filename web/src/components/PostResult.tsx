@@ -47,7 +47,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
   };
   const [zipping, setZipping] = useState(false);
   const [readyFiles, setReadyFiles] = useState<Array<{ name: string; blob: Blob }> | null>(null);
-  const zipName = `${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`;
+  const zipName = `keepsake_${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`;
   const [error, setError] = useState<string | null>(null);
 
   const ext = (b: Blob, item: MediaItem) => b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg");

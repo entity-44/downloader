@@ -121,7 +121,7 @@ export async function openExport(file: File, onProgress: (p: ImportProgress) => 
         kind: sn.kind,
         mime: sn.mime,
         size: raw.size,
-        filename: `${p.category}_${p.takenAt ? dateStamp(p.takenAt) : "undated"}_${String(i + 1).padStart(5, "0")}.${sn.ext}`,
+        filename: `keepsake_${p.category}_${p.takenAt ? dateStamp(p.takenAt) : "undated"}_${String(i + 1).padStart(5, "0")}.${sn.ext}`,
         category: p.category,
         caption: p.caption ?? undefined,
         takenAt: p.takenAt?.toISOString(),

@@ -148,7 +148,7 @@ function Gallery({ exp, onReset }: { exp: OpenedExport; onReset: () => void }) {
     try {
       await zipAndSave(
         list.map((it) => ({ name: `${it.category}/${it.filename}`, getBlob: () => exp.getBlob(it), date: it.takenAt ? new Date(it.takenAt) : undefined })),
-        `instagram_export_${suffix}.zip`,
+        `keepsake_instagram_export_${suffix}.zip`,
         (d, t) => setZipping(d / t),
       );
     } catch {

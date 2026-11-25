@@ -180,7 +180,7 @@ describe("export metadata & helpers", () => {
     expect(sniff(new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode("ftypisom")]))?.kind).toBe("VIDEO");
     expect(sniff(new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode("moof")]))?.kind).toBe("VIDEO");
     expect(sniff(new TextEncoder().encode("<html>"))).toBeNull();
-    expect(postFilename({ platform: "reddit", author: "op", id: "1abc2de", takenAt: "2023-11-14T22:13:20Z", index: 0, total: 2, ext: "mp4" })).toBe("reddit_op_1abc2de_2023-11-14_01.mp4");
+    expect(postFilename({ platform: "reddit", author: "op", id: "1abc2de", takenAt: "2023-11-14T22:13:20Z", index: 0, total: 2, ext: "mp4" })).toBe("keepsake_reddit_op_1abc2de_2023-11-14_01.mp4");
     expect(sanitize("../../a b/c")).toBe("a_b_c");
   });
 });
