@@ -70,7 +70,9 @@ const isStory = (l: IgLink | StoryLink): l is StoryLink => l.kind === "story" ||
 
 export function dataLinks(link: IgLink | StoryLink) {
   const page = isStory(link) ? link.canonicalUrl : `https://www.instagram.com/p/${link.shortcode}/`;
-  return { post: page, pageSource: `view-source:${page}` };
+  // data: the Snapinsta-style JSON link (posts only). Offered as an opt-in alternative because
+  // Instagram sometimes answers it with {"spam":true}; the page-source route is the default.
+  return { post: page, pageSource: `view-source:${page}`, data: isStory(link) ? undefined : `https://www.instagram.com/p/${link.shortcode}/?__a=1&__d=dis` };
 }
 
 /** Extracts every JSON block from a pasted page source. */

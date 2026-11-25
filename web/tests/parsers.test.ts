@@ -330,11 +330,13 @@ describe("avoiding Instagram's spam flag", () => {
     expect(r.toast).toMatch(/flagged that request as automated/);
   });
 
-  it("explains a pasted spam response and never generates the ?__a=1 address", async () => {
+  it("explains a pasted spam response; ?__a=1 only appears as the opt-in data link", async () => {
     const { parsePastedInstagram, dataLinks } = await import("../src/lib/resolve");
     expect(() => parsePastedInstagram('{"message":"","spam":true,"status":"fail"}')).toThrow(/flagged that page as automated/);
     const links = dataLinks({ kind: "post", shortcode: "CxYz123AbC", canonicalUrl: "" });
-    expect(Object.values(links).join(" ")).not.toContain("__a=1");
+    // The default route never uses ?__a=1; it is only the opt-in Data link.
+    expect(links.pageSource).not.toContain("__a=1");
+    expect(links.data).toBe("https://www.instagram.com/p/CxYz123AbC/?__a=1&__d=dis");
     expect(links.pageSource).toBe("view-source:https://www.instagram.com/p/CxYz123AbC/");
   });
 });
