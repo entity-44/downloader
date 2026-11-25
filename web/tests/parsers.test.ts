@@ -675,3 +675,12 @@ describe("RedGIFs", () => {
     expect(p.items[0].variants?.[1]).toMatchObject({ width: 480, height: 853 });
   });
 });
+
+describe("bookmark link is plain ASCII", () => {
+  it("contains no characters iPhone's bookmark field could mangle", () => {
+    const href = bookmarkletHref("https://entity-44.github.io/downloader/");
+    expect(/^[\x20-\x7e]+$/.test(href)).toBe(true);
+    expect(decodeURIComponent(href.slice(11))).toBe(bookmarkletSource("https://entity-44.github.io/downloader/"));
+    expect(href.length).toBeLessThan(9000);
+  });
+});

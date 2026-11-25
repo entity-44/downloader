@@ -135,7 +135,8 @@ export function bookmarkletSource(appUrl: string): string {
  * Minimal escaping keeps the link short (long pasted bookmarks can be cut off
  * on iPhone): only "%" (so nothing gets decoded twice) and "#" (fragment marker).
  */
-export const lightEncode = (code: string) => code.replace(/%/g, "%25").replace(/#/g, "%23");
+// Also percent-encode every non-ASCII character (e.g. the "…" in messages): iPhone's bookmark field can mangle them.
+export const lightEncode = (code: string) => code.replace(/%/g, "%25").replace(/#/g, "%23").replace(/[^\x20-\x7e]/g, (c) => encodeURIComponent(c));
 
 export function bookmarkletHref(appUrl: string) {
   return `javascript:${lightEncode(bookmarkletSource(appUrl))}`;

@@ -121,7 +121,7 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
         "First, allow scripts: iPhone Settings → Shortcuts → Advanced → turn on “Allow Running Scripts” (on some versions: Settings → Apps → Shortcuts → Advanced).",
         "Tap “Copy Shortcut code” below.",
         "Open the Shortcuts app and tap + (top right).",
-        "Tap the search field at the bottom of the editor, type “Run JavaScript”, and tap “Run JavaScript on Webpage”.",
+        "Tap the search field at the bottom of the editor, type “Run JavaScript”, and tap “Run JavaScript on Webpage”. If it says a faded “Web Page”, tap that and choose “Shortcut Input” (it must be solid blue).",
         "Tap the action’s code box and delete ALL of Apple’s sample code first (it must be completely empty), then paste. Check: the box should now start with ;(async and end with })(); with nothing before or after.",
         "Search “Copy to Clipboard” and tap it to add it under the first action.",
         "Search “Open URLs” and add it. Shortcuts pre-fills its URL with a blue token (like “Clipboard”): tap it and delete it, then type the page address below. If the token stays, nothing opens.",
