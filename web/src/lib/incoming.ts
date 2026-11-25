@@ -68,6 +68,17 @@ export function parseCollected(msg: Collected): Post {
   throw new UserError("No post data was received.");
 }
 
+/** Extracts post data from a Keepsake Shortcut link (…#/paste/<data>), if the text is one. */
+export function fromPasteLink(text: string): unknown | undefined {
+  const m = text.match(/#\/paste\/([^\s]+)/);
+  if (!m) return undefined;
+  try {
+    return JSON.parse(decodeURIComponent(m[1]));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Recognizes text copied by the iOS Shortcut. */
 export function asCollected(json: unknown): Collected | null {
   const o = json as Collected | null;

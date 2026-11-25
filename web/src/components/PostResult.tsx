@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { downloadItem } from "../lib/fetchmedia";
+import { downloadItem, fetchFile } from "../lib/fetchmedia";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
 import { redditVideoVariants } from "../lib/reddit";
 import { UserError, type MediaItem, type Post, type Variant } from "../lib/types";
@@ -178,11 +178,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
               return (
                 <div key={i} className="overflow-hidden rounded-xl border border-default bg-[var(--surface)]">
                   <div className={cn("relative grid place-items-center bg-[var(--surface-2)]", multi ? "aspect-square" : "min-h-48")}>
-                    {it.thumbUrl || it.kind === "IMAGE" ? (
-                      <img src={it.thumbUrl ?? it.url} alt="" referrerPolicy="no-referrer" loading="lazy" className={multi ? "size-full object-contain" : "h-auto max-h-[75vh] w-full object-contain"} style={!multi && it.width && it.height ? { aspectRatio: `${it.width} / ${it.height}` } : undefined} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                    ) : (
-                      <div className="grid size-full place-items-center text-muted"><IconVideo className="size-8" /></div>
-                    )}
+                    <Preview item={it} multi={multi} />
                     {it.kind === "VIDEO" && (
                       <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                         <IconVideo className="size-3" /> {formatDuration(it.durationSec) || "Video"}
@@ -261,4 +257,32 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
       )}
     </div>
   );
+}
+
+/**
+ * Shows the whole image (or a video's first frame). If the media server won't
+ * display it on this site, fetches it through the relay and shows it from memory.
+ */
+function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [stage, setStage] = useState<"direct" | "fallback" | "failed">("direct");
+  useEffect(() => () => void (blobUrl && URL.revokeObjectURL(blobUrl)), [blobUrl]);
+  const cls = multi ? "size-full object-contain" : "h-auto max-h-[75vh] w-full object-contain";
+  const style = !multi && item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined;
+  const imageUrl = item.thumbUrl ?? (item.kind === "IMAGE" ? item.url : undefined);
+  const onError = async () => {
+    if (stage !== "direct") return setStage("failed");
+    setStage("fallback");
+    try {
+      setBlobUrl(URL.createObjectURL(await fetchFile(imageUrl ?? item.url)));
+    } catch {
+      setStage("failed");
+    }
+  };
+  if (stage === "failed") {
+    return <div className="grid size-full min-h-48 place-items-center text-muted">{item.kind === "VIDEO" ? <IconVideo className="size-8" /> : <IconImage className="size-8" />}</div>;
+  }
+  if (imageUrl) return <img src={blobUrl ?? imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className={cls} style={style} onError={onError} />;
+  // Video without a thumbnail: the browser shows its first frame.
+  return <video src={blobUrl ?? `${item.url}#t=0.1`} muted playsInline preload="metadata" className={cls} style={style} onError={onError} />;
 }

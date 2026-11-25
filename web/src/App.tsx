@@ -67,7 +67,7 @@ export function App() {
 
   let view: React.ReactNode;
   if (top === "receive") view = <Receive />;
-  else if (top === "paste") view = <PasteView />;
+  else if (top === "paste") view = <PasteView key={route[1] ?? ""} data={route[1]} />;
   else if (top === "import") view = <ImportView />;
   else if (top === "button") view = <ButtonSetup />;
   else if (top === "settings") view = <Settings justConnected={fbConnected} />;

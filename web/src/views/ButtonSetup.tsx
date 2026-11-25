@@ -115,7 +115,7 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
     <div className="space-y-5">
       <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
         <p className="font-medium">Recommended on iPhone: a Share-menu Shortcut</p>
-        <p className="mt-1 text-muted">Once set up: open the post, story or highlight in Safari → <span className="font-medium text-[var(--text)]">Share → Save with Keepsake</span> → tap “Paste from Keepsake”. It reads the page inside your signed-in Safari, like the button.</p>
+        <p className="mt-1 text-muted">Once set up: open the post, story or highlight in Safari → <span className="font-medium text-[var(--text)]">Share → Save with Keepsake</span>, and the site opens with it ready. It reads the page inside your signed-in Safari, like the button.</p>
       </div>
       <Steps steps={[
         "First, allow scripts: iPhone Settings → Shortcuts → Advanced → turn on “Allow Running Scripts” (on some versions: Settings → Apps → Shortcuts → Advanced).",
@@ -123,13 +123,12 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
         "Open the Shortcuts app and tap + (top right).",
         "Tap the search field at the bottom of the editor, type “Run JavaScript”, and tap “Run JavaScript on Webpage”. If it says a faded “Web Page”, tap that and choose “Shortcut Input” (it must be solid blue).",
         "Tap the action’s code box and delete ALL of Apple’s sample code first (it must be completely empty), then paste. Check: the box should now start with ;(async and end with })(); with nothing before or after.",
-        "Search “Copy to Clipboard” and tap it to add it under the first action.",
-        "Search “Open URLs” and add it. Shortcuts pre-fills its URL with a blue token (like “Clipboard”): tap it and delete it, then type the page address below. If the token stays, nothing opens.",
+        "Search “Open URLs” and add it under the JavaScript action. Its URL must be the blue “JavaScript Result” token (Shortcuts usually fills it in; if it shows anything else, tap it and pick JavaScript Result). No “Copy to Clipboard” action is needed.",
         "Tap the Details button, turn on “Show in Share Sheet”. In the Receive row that appears, deselect every type except “Safari webpages”. Tap Done, then Done again to save. Rename it “Save with Keepsake” if you like.",
-        "Use it: open the post, story or highlight in Safari → tap Share (in iOS 26+ it may be inside the ••• menu) → tap your shortcut. Allow it to run on instagram.com the first time, then tap “Paste from Keepsake”.",
+        "Use it: open the post, story or highlight in Safari → tap Share (in iOS 26+ it may be inside the ••• menu) → tap your shortcut. Allow it to run on instagram.com the first time. Your site opens with the post ready to download.",
       ]} />
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => copy(shortcutSource(), "code")}>{copied === "code" ? <IconCheck className="size-4" /> : <IconClipboard className="size-4" />} {copied === "code" ? "Copied" : "Copy Shortcut code"}</Button>
+        <Button variant="primary" onClick={() => copy(shortcutSource(appUrl), "code")}>{copied === "code" ? <IconCheck className="size-4" /> : <IconClipboard className="size-4" />} {copied === "code" ? "Copied" : "Copy Shortcut code"}</Button>
         <Button onClick={() => copy(pasteUrl, "url")}>{copied === "url" ? <IconCheck className="size-4 text-emerald-500" /> : <IconLink className="size-4" />} {copied === "url" ? "Copied" : "Copy page address"}</Button>
       </div>
       <p className="break-all font-mono text-xs text-muted">{pasteUrl}</p>

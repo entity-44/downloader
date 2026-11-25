@@ -9,6 +9,11 @@ import { postFilename, sanitize } from "../src/lib/files";
 import { isTrustedMessage, TRUSTED_ORIGINS } from "../src/lib/bridge";
 
 const CDN = "https://scontent-lax3-1.cdninstagram.com/v/t51";
+/** The Shortcut returns a link to the paste page with the data inside it. */
+const decodeShortcut = (link: string) => {
+  expect(link.startsWith("https://entity-44.github.io/downloader/#/paste/")).toBe(true);
+  return JSON.parse(decodeURIComponent(link.split("#/paste/")[1]));
+};
 
 describe("Instagram", () => {
   it("parses post/reel/story-adjacent URLs", () => {
@@ -405,7 +410,7 @@ describe("iOS Shortcut", () => {
     } finally {
       Object.assign(g, saved);
     }
-    return { calls, result: JSON.parse(result!) };
+    return { calls, result: decodeShortcut(result!) };
   }
 
   it("returns page data the site can parse, without sending requests", async () => {
@@ -706,7 +711,7 @@ describe("story opened over a profile (address stays /username/)", () => {
     } finally {
       Object.assign(g, saved);
     }
-    const msg = JSON.parse(out);
+    const msg = decodeShortcut(out);
     expect(msg).toMatchObject({ kind: "screen", username: "someone", media: [{ kind: "VIDEO", url: `${CDN}/story.mp4` }] });
     const { resolveInput } = await import("../src/lib/resolve");
     expect((await resolveInput(out)).items[0].url).toBe(`${CDN}/story.mp4`);
@@ -751,7 +756,7 @@ describe("never the wrong video", () => {
     } finally {
       Object.assign(g, saved);
     }
-    expect(JSON.parse(out).media).toEqual([{ kind: "VIDEO", url: `${CDN}/current.mp4`, width: 720, height: 1280 }]);
+    expect(decodeShortcut(out).media).toEqual([{ kind: "VIDEO", url: `${CDN}/current.mp4`, width: 720, height: 1280 }]);
   });
 });
 
@@ -790,6 +795,15 @@ describe("story fallback and code version", () => {
     } finally {
       Object.assign(g, saved);
     }
-    expect(JSON.parse(out)).toMatchObject({ keepsake: 1, v: CODE_VERSION, error: expect.stringMatching(/Instagram or Reddit/) });
+    expect(decodeShortcut(out)).toMatchObject({ keepsake: 1, v: CODE_VERSION, error: expect.stringMatching(/Instagram or Reddit/) });
+  });
+});
+
+describe("Shortcut link opens straight to the post", () => {
+  it("resolves the link itself, without the clipboard", async () => {
+    const { resolveInput } = await import("../src/lib/resolve");
+    const data = { keepsake: 1, v: 13, platform: "instagram", url: "https://www.instagram.com/stories/a/", kind: "screen", username: "a", media: [{ kind: "IMAGE", url: `${CDN}/s.jpg` }] };
+    const link = "https://entity-44.github.io/downloader/#/paste/" + encodeURIComponent(JSON.stringify(data));
+    expect((await resolveInput(link)).items[0].url).toBe(`${CDN}/s.jpg`);
   });
 });

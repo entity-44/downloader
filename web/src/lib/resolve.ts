@@ -1,6 +1,6 @@
 import { parseInstagramHtml, parseInstagramJson, parseInstagramUrl, parseStoryData, parseStoryUrl, type IgLink, type StoryLink } from "./instagram";
 import { fetchRedditPost, parseRedditJson, parseRedditUrl, resolveVreddit } from "./reddit";
-import { asCollected, parseCollected } from "./incoming";
+import { asCollected, fromPasteLink, parseCollected } from "./incoming";
 import { fetchRedgifs, parseRedgifsUrl } from "./redgifs";
 import { setting } from "./router";
 import { fetchTweet, parseXUrl } from "./x";
@@ -23,6 +23,13 @@ export class NeedsButton extends Error {
 export async function resolveInput(input: string): Promise<Post> {
   const text = input.trim();
   if (!text) throw new UserError("Paste a link first.");
+
+  // A Keepsake Shortcut link with the post data inside it.
+  const linked = fromPasteLink(text);
+  if (linked !== undefined) {
+    const c = asCollected(linked);
+    if (c) return parseCollected(c);
+  }
 
   // Pasted data (manual backup method)
   if (text.startsWith("{") || text.startsWith("[")) {

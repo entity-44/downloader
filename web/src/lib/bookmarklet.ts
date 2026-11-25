@@ -96,7 +96,7 @@ const COLLECT = `
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 12;
+export const CODE_VERSION = 13;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
@@ -162,14 +162,21 @@ export function testShortcutSource() {
 }
 
 /** Code for the iOS Shortcut "Run JavaScript on Web Page" action. */
-export function shortcutSource(): string {
+/**
+ * The Shortcut returns a link to the paste page with the post data inside it,
+ * so "Open URLs" can load it directly (iPhone often blocks clipboard reads).
+ * Copying that link to the clipboard also still works.
+ */
+export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/"): string {
+  const app = new URL(appUrl);
+  const PASTE = JSON.stringify(app.origin + app.pathname + "#/paste/");
   // Leading ";" keeps a leftover sample line without a semicolon from swallowing our code.
   return ";" + oneLine(`
 (async () => {
   ${TOAST}
   ${COLLECT}
   let sent = false;
-  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; completion(JSON.stringify(o)); };
+  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; o.v = ${CODE_VERSION}; completion(${PASTE} + encodeURIComponent(JSON.stringify(o))); };
   const guard = setTimeout(() => send({ error: "The Keepsake script took too long on this page. Try again once the post has fully loaded." }), 8000);
   try {
     const msg = await collect();

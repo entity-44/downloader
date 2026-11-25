@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IconClipboard } from "../components/icons";
 import { PostResult } from "../components/PostResult";
 import { Button, Notice } from "../components/ui";
 import { CODE_VERSION } from "../lib/bookmarklet";
-import { asCollected, parseCollected } from "../lib/incoming";
+import { asCollected, fromPasteLink, parseCollected } from "../lib/incoming";
 import { UserError, type Post } from "../lib/types";
 
-/** Opened by the iOS Shortcut, which copies the post's data to the clipboard first. */
-export function PasteView() {
+/**
+ * Opened by the iOS Shortcut. Current Shortcut code opens this page with the
+ * post data in the link (#/paste/<data>); older setups copy it to the clipboard.
+ */
+export function PasteView({ data }: { data?: string }) {
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outdated, setOutdated] = useState(false);
@@ -17,10 +20,13 @@ export function PasteView() {
     setError(null);
     let json: unknown;
     const peek = text.trim() ? ` The clipboard had ${text.length} characters, starting with: “${text.trim().slice(0, 80)}”` : " The clipboard was empty.";
-    try {
-      json = JSON.parse(text.trim());
-    } catch {
-      return setError("The clipboard doesn't contain post data from the Keepsake Shortcut." + peek);
+    json = fromPasteLink(text);
+    if (json === undefined) {
+      try {
+        json = JSON.parse(text.trim());
+      } catch {
+        return setError("The clipboard doesn't contain post data from the Keepsake Shortcut." + peek);
+      }
     }
     const c = asCollected(json);
     if (!c) return setError("The clipboard doesn't contain post data from the Keepsake Shortcut.");
@@ -31,6 +37,14 @@ export function PasteView() {
       setError(e instanceof UserError ? e.message : "Couldn't read that post.");
     }
   };
+
+  // Data arrived inside the link: load it right away, then tidy the address bar.
+  useEffect(() => {
+    if (!data) return;
+    load("#/paste/" + data);
+    history.replaceState(null, "", location.pathname + "#/paste");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const fromClipboard = async () => {
     try {
