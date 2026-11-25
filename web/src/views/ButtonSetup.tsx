@@ -132,13 +132,13 @@ function IosShortcut({ appUrl }: { appUrl: string }) {
       </div>
       <p className="break-all font-mono text-xs text-muted">{pasteUrl}</p>
       <details className="text-sm text-muted">
-        <summary className="cursor-pointer">Prefer a bookmark instead?</summary>
+        <summary className="cursor-pointer">Or use a bookmark (no Shortcuts app needed)</summary>
         <div className="mt-3">
           <Steps steps={[
             "Tap “Copy button code” at the top of this page.",
             "In Safari, bookmark any page: Share → Add Bookmark → Save.",
             "Open Bookmarks → Edit, select the new bookmark, rename it “Save to Keepsake”, and replace its address with the copied code.",
-            "On a post in Safari, tap the address bar, type “Save to Keepsake” and tap the bookmark.",
+            "On a post in Safari, tap the Bookmarks button (open-book icon) and tap “Save to Keepsake” in the list. Don't run it from the address bar: Safari blocks that with “Cannot Run Script”.",
           ]} />
         </div>
       </details>
