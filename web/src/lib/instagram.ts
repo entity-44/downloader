@@ -107,7 +107,10 @@ function videoVariants(it: V1Item): Variant[] {
     const h = v.height ?? v.width ?? 0;
     if (!byHeight.has(h)) byHeight.set(h, v);
   }
-  return [...byHeight.entries()].sort((a, b) => b[0] - a[0]).map(([, v]) => v);
+  const all = [...byHeight.entries()].sort((a, b) => b[0] - a[0]).map(([, v]) => v);
+  // Drop entries without any size info when labelled sizes exist (they show up as a confusing "Original").
+  const sized = all.filter((v) => v.width || v.height);
+  return sized.length ? sized : all;
 }
 
 function v1Media(it: V1Item): MediaItem | null {

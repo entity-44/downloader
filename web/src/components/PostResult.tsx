@@ -171,7 +171,7 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
         <Notice tone="error" title="Nothing to download">This post doesn't contain downloadable images or videos.</Notice>
       ) : (
         <>
-          <div className={cn("grid gap-3", multi ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 sm:max-w-md")}>
+          <div className={cn("grid gap-3", multi ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "mx-auto w-full grid-cols-1 sm:max-w-md")}>
             {post.items.map((it, i) => {
               const s = states[i] ?? { status: "idle" };
               return (

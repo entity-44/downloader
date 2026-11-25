@@ -617,3 +617,10 @@ describe("small payloads (Shortcut clipboard)", () => {
     expect((await resolveInput(out)).items[0].url).toBe(`${CDN}/target.jpg`);
   });
 });
+
+describe("quality list cleanup", () => {
+  it("hides versions without size info when sized ones exist", () => {
+    const p = parseInstagramJson({ items: [{ code: "CLEAN0001", media_type: 2, video_versions: [{ url: `${CDN}/a.mp4`, width: 720, height: 1280 }, { url: `${CDN}/nosize.mp4` }] }] });
+    expect(p.items[0].variants!.map((v) => v.url)).toEqual([`${CDN}/a.mp4`]);
+  });
+});
