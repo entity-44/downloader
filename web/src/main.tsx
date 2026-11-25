@@ -10,6 +10,14 @@ try {
   /* unavailable */
 }
 
+// Shortcut links arrive as ?paste=<data>: hand them to the paste page.
+try {
+  const paste = new URLSearchParams(location.search).get("paste");
+  if (paste) history.replaceState(null, "", location.pathname + "#/paste/" + encodeURIComponent(paste));
+} catch {
+  /* ignore */
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

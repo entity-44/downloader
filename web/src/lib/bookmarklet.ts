@@ -96,7 +96,7 @@ const COLLECT = `
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 13;
+export const CODE_VERSION = 14;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
@@ -169,7 +169,8 @@ export function testShortcutSource() {
  */
 export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/"): string {
   const app = new URL(appUrl);
-  const PASTE = JSON.stringify(app.origin + app.pathname + "#/paste/");
+  // No "#": the Shortcuts "Open URLs" action percent-encodes it, which breaks the address.
+  const PASTE = JSON.stringify(app.origin + app.pathname + "?paste=");
   // Leading ";" keeps a leftover sample line without a semicolon from swallowing our code.
   return ";" + oneLine(`
 (async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { downloadItem, fetchFile } from "../lib/fetchmedia";
+import { videoThumb } from "../lib/thumbs";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
 import { redditVideoVariants } from "../lib/reddit";
 import { UserError, type MediaItem, type Post, type Variant } from "../lib/types";
@@ -283,6 +284,41 @@ function Preview({ item, multi }: { item: MediaItem; multi: boolean }) {
     return <div className="grid size-full min-h-48 place-items-center text-muted">{item.kind === "VIDEO" ? <IconVideo className="size-8" /> : <IconImage className="size-8" />}</div>;
   }
   if (imageUrl) return <img src={blobUrl ?? imageUrl} alt="" referrerPolicy="no-referrer" loading="lazy" className={cls} style={style} onError={onError} />;
-  // Video without a thumbnail: the browser shows its first frame.
-  return <video src={blobUrl ?? `${item.url}#t=0.1`} muted playsInline preload="metadata" className={cls} style={style} onError={onError} />;
+  return <VideoPreview item={item} className={cls} style={style} />;
+}
+
+/**
+ * Video without a thumbnail. iPhone Safari doesn't draw a video's first frame
+ * until it plays, so fetch the video (directly or via the relay), grab a frame
+ * as the poster, and show a playable preview.
+ */
+function VideoPreview({ item, className, style }: { item: MediaItem; className: string; style?: React.CSSProperties }) {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [poster, setPoster] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const urls: string[] = [];
+    fetchFile(item.url)
+      .then(async (blob) => {
+        if (!live) return;
+        const v = URL.createObjectURL(blob);
+        urls.push(v);
+        setVideoUrl(v);
+        const { thumb } = await videoThumb(blob);
+        if (thumb && live) {
+          const p = URL.createObjectURL(thumb);
+          urls.push(p);
+          setPoster(p);
+        }
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [item.url]);
+  if (failed) return <div className="grid size-full min-h-48 place-items-center text-muted"><IconVideo className="size-8" /></div>;
+  if (!videoUrl) return <div className="grid size-full min-h-48 place-items-center text-muted"><Spinner /></div>;
+  return <video src={videoUrl} poster={poster ?? undefined} controls muted playsInline preload="metadata" className={className} style={style} />;
 }
