@@ -14,7 +14,7 @@ A static build of Keepsake that runs entirely in your browser. No server, no acc
 | Official Instagram API (optional) | Facebook Login browser flow (no secret) for Business/Creator accounts linked to a Page |
 | Backup | Paste the post's JSON / page source |
 
-It's one-time by design: paste a link, download, start over. Nothing is stored. Reloading clears everything. Reddit's separate video and audio streams are merged with a self-hosted FFmpeg WebAssembly build, loaded only when needed.
+It's one-time by design: paste a link, download, start over. Nothing is stored. Reloading clears everything. Media files are fetched directly when possible, otherwise through a small Cloudflare Worker relay ([`../relay`](../relay/)) that only fetches media files. Reddit's separate video and audio streams are merged with a self-hosted FFmpeg WebAssembly build, loaded only when needed.
 
 ## How the button works
 

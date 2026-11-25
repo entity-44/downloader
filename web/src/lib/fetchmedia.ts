@@ -1,4 +1,5 @@
 import { bridgeAvailable, bridgeFetch } from "./bridge";
+import { RELAY_URL } from "./config";
 import { mergeAudioVideo } from "./merge";
 import { parseDashManifest } from "./reddit";
 import { sniffBlob } from "./sniff";
@@ -11,21 +12,31 @@ function assertAllowed(url: string) {
   if (u.protocol !== "https:" || !ALLOWED.test(u.hostname)) throw new UserError("Unexpected media host; refusing to fetch.");
 }
 
-/** Fetches a media URL: directly if the CDN allows it, otherwise through the bookmarklet tab. */
-export async function fetchFile(url: string): Promise<Blob> {
+/** Fetch a media URL, falling back in order: directly → media relay → the bookmarklet's tab. */
+export async function fetchFile(url: string, fetcher: typeof fetch = fetch): Promise<Blob> {
   assertAllowed(url);
+  const expired = () => new UserError("The file link expired or is unavailable. Use the button on the post again to get fresh links.");
   try {
-    const res = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer" });
+    const res = await fetcher(url, { credentials: "omit", referrerPolicy: "no-referrer" });
     if (res.ok) return await res.blob();
-    if (res.status === 403 || res.status === 404 || res.status === 410) {
-      throw new UserError("The file link expired or is unavailable. Use the button on the post again to get fresh links.");
-    }
+    if (res.status === 404 || res.status === 410) throw expired();
   } catch (e) {
     if (e instanceof UserError) throw e;
-    // Likely blocked cross-origin read; fall through to the bridge.
+    // Cross-origin read blocked; try the relay.
+  }
+  if (RELAY_URL) {
+    try {
+      const res = await fetcher(`${RELAY_URL}/media?u=${encodeURIComponent(url)}`, { credentials: "omit" });
+      if (res.ok) return await res.blob();
+      if (res.status === 404 || res.status === 403 || res.status === 410) {
+        if (!bridgeAvailable()) throw expired();
+      }
+    } catch (e) {
+      if (e instanceof UserError) throw e;
+    }
   }
   if (bridgeAvailable()) return bridgeFetch(url);
-  throw new UserError("Your browser blocked downloading this file directly. Keep the original tab open and use the one-click button, or use “Open file”.");
+  throw new UserError("Couldn't download this file right now. Use “Open file” to save it from Instagram directly, or tap the button on the post again.");
 }
 
 export type Progress = (stage: string, fraction?: number) => void;
