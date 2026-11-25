@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { IconCheck, IconClipboard, IconLink } from "../components/icons";
 import { Badge, Button, Card, Notice, PageHeader, SectionTitle, cn } from "../components/ui";
-import { bookmarkletHref, shortcutSource, testBookmarkletHref, testShortcutSource } from "../lib/bookmarklet";
+import { bookmarkletHref, shortcutSource, sizeTestBookmarkletHref, testBookmarkletHref, testShortcutSource } from "../lib/bookmarklet";
 
 const TABS = ["Computer", "iPhone / iPad", "Android"] as const;
 
@@ -163,6 +163,14 @@ function Troubleshoot() {
         <li>
           <span className="font-medium text-[var(--text)]">Test bookmark:</span> copy it, save it as a second bookmark (same steps as the real one), then open an Instagram post in Safari and run it from the Bookmarks list. You should see a dark box saying “Keepsake test OK”.
           <div className="mt-2"><Button size="sm" onClick={() => copy(testBookmarkletHref(), "bm")}>{copied === "bm" ? "Copied" : "Copy test bookmark"}</Button></div>
+        </li>
+        <li>
+          <span className="font-medium text-[var(--text)]">Size tests:</span> if the test bookmark works but the real one does nothing, the real code may be getting cut off. Save each of these as a bookmark and run it on Instagram. A green box means that size works. The real bookmark is about {Math.round(bookmarkletHref(location.origin + import.meta.env.BASE_URL).length / 1000)}k characters.
+          <div className="mt-2 flex flex-wrap gap-2">
+            {[2000, 4000, 6000, 9000].map((n) => (
+              <Button key={n} size="sm" onClick={() => copy(sizeTestBookmarkletHref(n), "size" + n)}>{copied === "size" + n ? "Copied" : `Copy ${n / 1000}k test`}</Button>
+            ))}
+          </div>
         </li>
         <li>
           <span className="font-medium text-[var(--text)]">Test Shortcut code:</span> paste it into your Shortcut instead of the real code, run it from Safari’s Share menu on a post, then tap “Paste from Keepsake”. It shows “TEST OK” and what it found.

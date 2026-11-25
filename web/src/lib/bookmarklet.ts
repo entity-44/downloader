@@ -150,6 +150,17 @@ export function testBookmarkletHref() {
   return `javascript:${lightEncode(code)}`;
 }
 
+/** Bookmark of a given total length that only shows a message: finds iPhone's bookmark length limit. */
+export function sizeTestBookmarkletHref(totalLength: number) {
+  const head = "(function(){var pad='";
+  const tail =
+    "';var d=document.createElement('div');d.style.cssText='position:fixed;z-index:2147483647;top:20px;left:10px;right:10px;background:%23063;color:%23fff;padding:14px;border-radius:12px;font:15px -apple-system,system-ui,sans-serif';d.textContent='Size test OK: " +
+    totalLength +
+    " characters work';document.body.appendChild(d);setTimeout(function(){d.remove()},10000)})()";
+  const padLen = Math.max(0, totalLength - "javascript:".length - head.length - tail.length);
+  return `javascript:${head}${"x".repeat(padLen)}${tail}`;
+}
+
 /** Tiny Shortcut code that reports what it sees; the paste page shows the report. */
 export function testShortcutSource() {
   return ";completion(JSON.stringify({keepsake:1,error:'TEST OK. Page: '+location.hostname+location.pathname+' | data blocks: '+document.querySelectorAll('script[type=\"application/json\"]').length}));";
@@ -162,14 +173,17 @@ export function shortcutSource(): string {
 (async () => {
   ${TOAST}
   ${COLLECT}
+  let sent = false;
+  const send = (o) => { if (sent) return; sent = true; o.keepsake = 1; completion(JSON.stringify(o)); };
+  const guard = setTimeout(() => send({ error: "The Keepsake script took too long on this page. Try again once the post has fully loaded." }), 8000);
   try {
     const msg = await collect();
-    msg.keepsake = 1;
     if (msg.html) delete msg.html;
-    toast("Copied for Keepsake");
-    completion(JSON.stringify(msg));
+    try { toast("Copied for Keepsake"); } catch (e) {}
+    send(msg);
   } catch (err) {
-    completion(JSON.stringify({ keepsake: 1, error: String(err && err.message || err) }));
+    send({ error: "Keepsake script error: " + String(err && err.message || err) });
   }
+  clearTimeout(guard);
 })();`);
 }

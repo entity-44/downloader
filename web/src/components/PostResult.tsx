@@ -176,9 +176,9 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
               const s = states[i] ?? { status: "idle" };
               return (
                 <div key={i} className="overflow-hidden rounded-xl border border-default bg-[var(--surface)]">
-                  <div className="relative aspect-square bg-[var(--surface-2)]">
+                  <div className={cn("relative grid place-items-center bg-[var(--surface-2)]", multi ? "aspect-square" : "min-h-48")}>
                     {it.thumbUrl || it.kind === "IMAGE" ? (
-                      <img src={it.thumbUrl ?? it.url} alt="" referrerPolicy="no-referrer" loading="lazy" className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                      <img src={it.thumbUrl ?? it.url} alt="" referrerPolicy="no-referrer" loading="lazy" className={multi ? "size-full object-contain" : "h-auto max-h-[75vh] w-full object-contain"} style={!multi && it.width && it.height ? { aspectRatio: `${it.width} / ${it.height}` } : undefined} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
                     ) : (
                       <div className="grid size-full place-items-center text-muted"><IconVideo className="size-8" /></div>
                     )}
