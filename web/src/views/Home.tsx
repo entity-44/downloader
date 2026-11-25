@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import { IconArchive, IconClipboard, IconDownload, IconLink, IconChevronRight } from "../components/icons";
 import { PostResult } from "../components/PostResult";
 import { Badge, Button, Card, Notice, SectionTitle } from "../components/ui";
-import { NeedsButton, resolveInput } from "../lib/resolve";
+import { GuidedPaste } from "../components/GuidedPaste";
+import type { IgLink } from "../lib/instagram";
+import { NeedsButton, NeedsGuidedPaste, resolveInput } from "../lib/resolve";
 import { UserError, type Post } from "../lib/types";
 
 export function Home() {
@@ -10,12 +12,14 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<{ message: string; needsButton?: boolean } | null>(null);
+  const [guided, setGuided] = useState<IgLink | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setInput("");
     setPost(null);
     setError(null);
+    setGuided(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
     inputRef.current?.focus();
   }
@@ -26,10 +30,12 @@ export function Home() {
     setBusy(true);
     setError(null);
     setPost(null);
+    setGuided(null);
     try {
       setPost(await resolveInput(input));
     } catch (err) {
-      if (err instanceof NeedsButton) setError({ message: err.message, needsButton: true });
+      if (err instanceof NeedsGuidedPaste) setGuided(err.link);
+      else if (err instanceof NeedsButton) setError({ message: err.message, needsButton: true });
       else setError({ message: err instanceof UserError ? err.message : "Something went wrong. Try again." });
     } finally {
       setBusy(false);
@@ -89,6 +95,11 @@ export function Home() {
           >
             {error.message}
           </Notice>
+        </div>
+      )}
+      {guided && !post && (
+        <div className="mx-auto max-w-3xl">
+          <GuidedPaste key={guided.shortcode} link={guided} onPost={(p) => { setPost(p); setGuided(null); }} />
         </div>
       )}
       {post && <div className="mx-auto max-w-4xl"><PostResult key={post.url + post.id} post={post} onReset={reset} /></div>}

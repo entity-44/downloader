@@ -239,3 +239,15 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
     items: [{ kind: "IMAGE", url: pic.url, width: pic.width, height: pic.height }],
   };
 }
+
+/** Post data the bookmarklet found already embedded in the page (no extra request made). */
+export function parsePageJson(blocks: string[], sourceUrl: string, shortcode?: string): Post {
+  for (const b of blocks) {
+    try {
+      return parseInstagramJson(JSON.parse(b), sourceUrl, shortcode);
+    } catch {
+      /* try the next block */
+    }
+  }
+  throw new UserError("Couldn't find the post data on that page. Reload the post on Instagram and tap the button again.");
+}

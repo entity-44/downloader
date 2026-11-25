@@ -15,7 +15,7 @@ export const TRUSTED_ORIGINS = new Set([
 ]);
 
 export type Incoming =
-  | { type: "keepsake:post"; platform: "instagram" | "reddit"; url: string; kind?: "post" | "reel" | "profile"; reelLabel?: string; username?: string; raw?: unknown; html?: string; shortcode?: string }
+  | { type: "keepsake:post"; platform: "instagram" | "reddit"; url: string; kind?: "post" | "reel" | "profile"; reelLabel?: string; pageJson?: string[]; username?: string; raw?: unknown; html?: string; shortcode?: string }
   | { type: "keepsake:file"; reqId: string; buffer: ArrayBuffer; mime: string }
   | { type: "keepsake:file-error"; reqId: string; error: string };
 

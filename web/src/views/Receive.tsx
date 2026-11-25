@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { PostResult } from "../components/PostResult";
 import { Notice, Spinner } from "../components/ui";
 import { receivePost } from "../lib/bridge";
-import { parseInstagramHtml, parseInstagramJson, parseInstagramProfile, parseInstagramReel } from "../lib/instagram";
+import { parseInstagramHtml, parseInstagramJson, parseInstagramProfile, parseInstagramReel, parsePageJson } from "../lib/instagram";
 import { parseRedditJson } from "../lib/reddit";
 import { UserError, type Post } from "../lib/types";
 
@@ -20,6 +20,7 @@ export function Receive() {
         if (msg.platform === "reddit") p = parseRedditJson(msg.raw);
         else if (msg.kind === "reel") p = parseInstagramReel(msg.raw, msg.reelLabel ?? "stories", msg.url);
         else if (msg.kind === "profile") p = parseInstagramProfile(msg.raw, msg.username ?? "", msg.url);
+        else if (msg.pageJson?.length) p = parsePageJson(msg.pageJson, msg.url, msg.shortcode);
         else if (msg.raw) p = parseInstagramJson(msg.raw, msg.url, msg.shortcode);
         else if (msg.html) p = parseInstagramHtml(msg.html, msg.shortcode);
         else throw new UserError("No post data was received.");

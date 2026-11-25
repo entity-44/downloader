@@ -20,7 +20,10 @@ export function bookmarkletSource(appUrl: string): string {
     const h = location.hostname, p = location.pathname;
     let msg;
     if (/(^|\\.)instagram\\.com$/.test(h)) {
-      const get = async (u) => { try { const r = await fetch(u, { headers: { "x-ig-app-id": "936619743392459" }, credentials: "include" }); return r.ok ? await r.json() : null; } catch (e) { return null; } };
+      const SPAM = "Instagram flagged that request as automated, so Keepsake stopped. Wait a while before trying again. Don't retry repeatedly.";
+      const hdrs = () => { const o = { "x-ig-app-id": "936619743392459", "x-requested-with": "XMLHttpRequest" }; const c = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1]; if (c) o["x-csrftoken"] = c; try { const w = sessionStorage.getItem("www-claim-v2"); if (w) o["x-ig-www-claim"] = w; } catch (e) {} return o; };
+      const get = async (u) => { let j = null; try { const r = await fetch(u, { headers: hdrs(), credentials: "include" }); j = await r.json().catch(() => null); if (!r.ok && !(j && j.spam)) return null; } catch (e) { return null; } if (j && (j.spam || (j.status === "fail" && !j.items && !j.reels && !j.user && !j.data))) throw new Error(SPAM); return j; };
+      const onPage = (code) => { const out = []; document.querySelectorAll('script[type="application/json"]').forEach((s) => { const t = s.textContent || ""; if (t.length < 5e6 && (t.indexOf("image_versions2") >= 0 || t.indexOf("video_versions") >= 0) && (!code || t.indexOf(code) >= 0)) out.push(t); }); return out; };
       const userId = async (name) => { const j = await get("/api/v1/users/web_profile_info/?username=" + encodeURIComponent(name)); return { j: j, id: j && j.data && j.data.user && j.data.user.id }; };
       const base = { type: "keepsake:post", platform: "instagram", url: location.href };
       const hl = p.match(/\\/stories\\/highlights\\/(\\d+)/);
@@ -40,8 +43,11 @@ export function bookmarkletSource(appUrl: string): string {
         if (!raw) throw new Error("Couldn't read these stories. Make sure you can see them.");
         msg = Object.assign(base, { kind: "reel", reelLabel: "stories_" + su[1], raw: raw });
       } else if (m || st) {
-        const raw = await get("/api/v1/media/" + (st ? st[2] : sc2id(m[1])) + "/info/");
-        msg = Object.assign(base, { kind: "post", shortcode: m ? m[1] : undefined, raw: raw, html: raw ? undefined : document.documentElement.outerHTML });
+        const code = m ? m[1] : undefined;
+        const found = code ? onPage(code) : [];
+        const raw = found.length ? null : await get("/api/v1/media/" + (st ? st[2] : sc2id(m[1])) + "/info/");
+        if (!found.length && !raw && st) throw new Error("Couldn't read this story. Make sure you can see it.");
+        msg = Object.assign(base, { kind: "post", shortcode: code, pageJson: found.length ? found : undefined, raw: raw, html: found.length || raw ? undefined : document.documentElement.outerHTML });
       } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0) {
         const u = await userId(seg[0]);
         const info = u.id ? await get("/api/v1/users/" + u.id + "/info/") : null;

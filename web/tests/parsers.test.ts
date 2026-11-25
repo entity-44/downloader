@@ -222,17 +222,19 @@ describe("Instagram highlights, stories and profiles", () => {
 
 describe("bookmarklet page detection", () => {
   // Runs the real bookmarklet against a fake page and records which endpoints it calls.
-  async function run(pathname: string, responses: Record<string, unknown> = {}) {
+  async function run(pathname: string, responses: Record<string, unknown> = {}, pageScripts: string[] = []) {
     const calls: string[] = [];
+    const headers: Array<Record<string, string>> = [];
     let opened: string | null = null;
     const toastEl = { style: {}, remove() {}, textContent: "" } as unknown as HTMLElement & { _t?: number };
     const g = globalThis as unknown as Record<string, unknown>;
     const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
     g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
-    g.document = { getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
+    g.document = { cookie: "csrftoken=abc123", querySelectorAll: () => pageScripts.map((t) => ({ textContent: t })), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
     g.window = { open: (u: string) => ((opened = u), { postMessage() {} }), addEventListener() {} };
-    g.fetch = async (u: string) => {
+    g.fetch = async (u: string, init?: { headers?: Record<string, string> }) => {
       calls.push(u);
+      headers.push(init?.headers ?? {});
       const key = Object.keys(responses).find((k) => u.includes(k));
       return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
     };
@@ -241,7 +243,7 @@ describe("bookmarklet page detection", () => {
     } finally {
       Object.assign(g, saved);
     }
-    return { calls, opened, toast: toastEl.textContent };
+    return { calls, headers, opened, toast: toastEl.textContent };
   }
 
   it("reads highlights via the story-tray endpoint", async () => {
@@ -270,5 +272,60 @@ describe("bookmarklet page detection", () => {
     expect(r.calls).toEqual([]);
     expect(r.opened).toBeNull();
     expect(r.toast).toMatch(/Open a post, reel, story, highlight or profile/);
+  });
+});
+
+describe("avoiding Instagram's spam flag", () => {
+  async function runPage(pathname: string, responses: Record<string, unknown>, pageScripts: string[] = []) {
+    const calls: string[] = [];
+    const headers: Array<Record<string, string>> = [];
+    let opened: string | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" } as unknown as HTMLElement;
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    g.location = { hostname: "www.instagram.com", pathname, href: `https://www.instagram.com${pathname}` };
+    g.document = { cookie: "csrftoken=abc123; other=1", querySelectorAll: () => pageScripts.map((t) => ({ textContent: t })), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "<html></html>" } };
+    g.window = { open: (u: string) => ((opened = u), { postMessage() {} }), addEventListener() {} };
+    g.fetch = async (u: string, init?: { headers?: Record<string, string> }) => {
+      calls.push(u);
+      headers.push(init?.headers ?? {});
+      const key = Object.keys(responses).find((k) => u.includes(k));
+      return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
+    };
+    try {
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+    } finally {
+      Object.assign(g, saved);
+    }
+    return { calls, headers, opened, toast: (toastEl as unknown as { textContent: string }).textContent };
+  }
+
+  it("uses post data already on the page without sending any request", async () => {
+    const embedded = JSON.stringify({ require: [{ items: [{ code: "CxYz123AbC", media_type: 1, image_versions2: { candidates: [{ url: `${CDN}/a.jpg`, width: 1080 }] } }] }] });
+    const r = await runPage("/p/CxYz123AbC/", {}, ["{\"unrelated\":true}", embedded]);
+    expect(r.calls).toEqual([]);
+    expect(r.opened).toBe("https://entity-44.github.io/downloader/#/receive");
+  });
+
+  it("sends Instagram's own web headers when it must make a request", async () => {
+    const r = await runPage("/p/CxYz123AbC/", { "/media/": { items: [] } });
+    expect(r.calls).toHaveLength(1);
+    expect(r.headers[0]).toMatchObject({ "x-ig-app-id": "936619743392459", "x-csrftoken": "abc123", "x-requested-with": "XMLHttpRequest" });
+    expect(r.calls[0]).not.toContain("__a=1");
+  });
+
+  it("stops immediately (no retry, no tab) when Instagram answers spam:true", async () => {
+    const r = await runPage("/stories/highlights/1790/", { reels_media: { message: "", spam: true, status: "fail" } });
+    expect(r.calls).toHaveLength(1);
+    expect(r.opened).toBeNull();
+    expect(r.toast).toMatch(/flagged that request as automated/);
+  });
+
+  it("explains a pasted spam response and never generates the ?__a=1 address", async () => {
+    const { parsePastedInstagram, dataLinks } = await import("../src/lib/resolve");
+    expect(() => parsePastedInstagram('{"message":"","spam":true,"status":"fail"}')).toThrow(/flagged that page as automated/);
+    const links = dataLinks({ kind: "post", shortcode: "CxYz123AbC", canonicalUrl: "" });
+    expect(Object.values(links).join(" ")).not.toContain("__a=1");
+    expect(links.pageSource).toBe("view-source:https://www.instagram.com/p/CxYz123AbC/");
   });
 });
