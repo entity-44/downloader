@@ -6,7 +6,9 @@ A private, self-hostable web app for saving **Instagram media you own or are aut
 - **Data-export importer**: upload the ZIP from Instagram's *Download your information*. This works for **personal and private accounts** and includes stories, reels, posts, profile photos and archived media. Files are organized by type and date into a browsable gallery with bulk ZIP download.
 - **Files you were given**: add photos or videos someone shared with you (with your attestation that you're authorized).
 
-It **never** scrapes, bypasses login or privacy settings, uses stolen cookies, or asks for an Instagram password.
+This server version uses only official APIs and your own files. It never scrapes, bypasses login or privacy settings, or asks for an Instagram password.
+
+> **No server? Use the browser-only version.** The [`web/`](web/) folder is a static build for GitHub Pages: free, no card, any device. It adds a one-click button for Instagram and Reddit (Reddit videos with sound). The button reads the single post you are viewing using your own browser session, an unofficial method. Trade-offs: [web/README.md](web/README.md).
 
 ---
 

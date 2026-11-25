@@ -10,3 +10,5 @@ tests
 *.md
 !README.md
 .git
+web/node_modules
+web/dist
