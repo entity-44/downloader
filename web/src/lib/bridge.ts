@@ -12,10 +12,11 @@ export const TRUSTED_ORIGINS = new Set([
   "https://old.reddit.com",
   "https://new.reddit.com",
   "https://sh.reddit.com",
+  "https://www.pixiv.net",
 ]);
 
 export type Incoming =
-  | { type: "keepsake:post"; platform: "instagram" | "reddit"; url: string; kind?: "post" | "reel" | "profile" | "storypage" | "screen"; reelLabel?: string; pageJson?: string[]; storyId?: string; media?: unknown[]; error?: string; username?: string; raw?: unknown; html?: string; shortcode?: string }
+  | { type: "keepsake:post"; platform: "instagram" | "reddit" | "pixiv"; url: string; kind?: "post" | "reel" | "profile" | "storypage" | "screen"; reelLabel?: string; pageJson?: string[]; storyId?: string; media?: unknown[]; error?: string; username?: string; raw?: unknown; html?: string; shortcode?: string }
   | { type: "keepsake:file"; reqId: string; buffer: ArrayBuffer; mime: string }
   | { type: "keepsake:file-error"; reqId: string; error: string };
 

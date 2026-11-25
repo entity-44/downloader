@@ -3,6 +3,8 @@ import { fetchRedditPost, parseRedditJson, parseRedditUrl, resolveVreddit } from
 import { asCollected, fromPasteLink, parseCollected } from "./incoming";
 import { fetchRedgifs, parseRedgifsUrl } from "./redgifs";
 import { setting } from "./router";
+import { fetchPixiv, parsePixivUrl } from "./pixiv";
+import { fetchSnapchat, parseSnapchatUrl } from "./snapchat";
 import { fetchTweet, parseXUrl } from "./x";
 import { UserError, type Post } from "./types";
 
@@ -15,7 +17,7 @@ export class NeedsGuidedPaste extends Error {
 
 /** Thrown when a link needs the one-click button (no way to read it from this site). */
 export class NeedsButton extends Error {
-  constructor(readonly platform: "instagram" | "reddit", message: string) {
+  constructor(readonly platform: "instagram" | "reddit" | "pixiv", message: string) {
     super(message);
   }
 }
@@ -53,6 +55,16 @@ export async function resolveInput(input: string): Promise<Post> {
   if (xLink) return fetchTweet(xLink.id, xLink.canonicalUrl);
   const rg = parseRedgifsUrl(text);
   if (rg) return fetchRedgifs(rg.id, rg.canonicalUrl);
+  const px = parsePixivUrl(text);
+  if (px) {
+    try {
+      return await fetchPixiv(px.id, px.canonicalUrl);
+    } catch {
+      throw new NeedsButton("pixiv", "Pixiv doesn't let other servers read its works, so open this work on pixiv.net and tap the Keepsake button (or run the Shortcut on iPhone). It also works for adults-only works when you're signed in.");
+    }
+  }
+  const sc = parseSnapchatUrl(text);
+  if (sc) return fetchSnapchat(sc.url);
 
   const ig = parseInstagramUrl(text);
   if (ig) throw new NeedsGuidedPaste(ig);
@@ -66,7 +78,7 @@ export async function resolveInput(input: string): Promise<Post> {
     if (clientId) return fetchRedditPost(rd.id, clientId);
     throw new NeedsButton("reddit", "Open this post on reddit.com and tap the Keepsake button, or add a free Reddit client ID in Settings to paste Reddit links directly.");
   }
-  throw new UserError("Paste a link from Instagram, Reddit, X (Twitter) or RedGIFs.");
+  throw new UserError("Paste a link from Instagram, Reddit, X (Twitter), RedGIFs, Pixiv or Snapchat.");
 }
 
 /**

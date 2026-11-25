@@ -253,7 +253,7 @@ describe("bookmarklet page detection", () => {
       return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
     };
     try {
-      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async\s*\(\)\s*=>\s*\{/, "").replace(/\}\)\(\);$/, "")} })()`)();
       await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
     } finally {
       Object.assign(g, saved);
@@ -310,7 +310,7 @@ describe("avoiding Instagram's spam flag", () => {
       return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
     };
     try {
-      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async\s*\(\)\s*=>\s*\{/, "").replace(/\}\)\(\);$/, "")} })()`)();
       await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
     } finally {
       Object.assign(g, saved);
@@ -494,7 +494,7 @@ describe("stories: page data, then request, then on-screen fallback", () => {
       return key ? new Response(JSON.stringify(responses[key])) : new Response("{}", { status: 404 });
     };
     try {
-      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async \(\) => \{/, "").replace(/\}\)\(\);$/, "")} })()`)();
+      await new Function(`return (async () => { ${bookmarkletSource("https://entity-44.github.io/downloader/").replace(/^\(async\s*\(\)\s*=>\s*\{/, "").replace(/\}\)\(\);$/, "")} })()`)();
       // Simulate the app saying "ready" so the bookmark hands over its data.
       await (listener as unknown as (e: unknown) => Promise<void>)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
     } finally {
@@ -799,7 +799,7 @@ describe("story fallback and code version", () => {
     } finally {
       Object.assign(g, saved);
     }
-    expect(decodeShortcut(out)).toMatchObject({ keepsake: 1, v: CODE_VERSION, error: expect.stringMatching(/Instagram or Reddit/) });
+    expect(decodeShortcut(out)).toMatchObject({ keepsake: 1, v: CODE_VERSION, error: expect.stringMatching(/Instagram, Reddit or Pixiv/) });
   });
 });
 
@@ -865,5 +865,104 @@ describe("Shortcut new tab and thumbnail sizes", () => {
     const p = parseInstagramJson({ items: [{ code: "THUMBS0001", media_type: 2, video_versions: [{ url: `${CDN}/v.mp4`, width: 720, height: 1280 }], image_versions2: { candidates: [{ url: `${CDN}/c640.jpg`, width: 640, height: 1138 }, { url: `${CDN}/c1080.jpg`, width: 1080, height: 1920 }, { url: `${CDN}/c320.jpg`, width: 320, height: 569 }] } }] });
     expect(p.items[0].thumbVariants?.map((v) => v.width)).toEqual([1080, 640, 320]);
     expect(p.items[0].thumbUrl).toBe(`${CDN}/c1080.jpg`);
+  });
+});
+
+describe("Pixiv", () => {
+  it("recognizes work links", async () => {
+    const { parsePixivUrl } = await import("../src/lib/pixiv");
+    expect(parsePixivUrl("https://www.pixiv.net/en/artworks/44298467")).toEqual({ id: "44298467", canonicalUrl: "https://www.pixiv.net/artworks/44298467" });
+    expect(parsePixivUrl("pixiv.net/artworks/123")?.id).toBe("123");
+    expect(parsePixivUrl("https://www.pixiv.net/member_illust.php?mode=medium&illust_id=555")?.id).toBe("555");
+    expect(parsePixivUrl("https://pixiv.net.evil.com/artworks/1")).toBeNull();
+  });
+
+  it("turns an ugoira into MP4 options plus the original frames ZIP", async () => {
+    const { parsePixiv } = await import("../src/lib/pixiv");
+    const p = parsePixiv({
+      illust: { illustId: "44298467", illustTitle: "うごイラはじめました", userName: "pixiv事務局", illustType: 2, width: 1920, height: 1080, createDate: "2014-06-25T05:30:22+00:00", urls: { regular: "https://i.pximg.net/img-master/r.jpg", original: "https://i.pximg.net/img-original/o.jpg" } },
+      ugoira: { src: "https://i.pximg.net/img-zip-ugoira/x_ugoira600x600.zip", originalSrc: "https://i.pximg.net/img-zip-ugoira/x_ugoira1920x1080.zip", frames: Array.from({ length: 12 }, (_, k) => ({ file: `${String(k).padStart(6, "0")}.jpg`, delay: 125 })) },
+    }, "");
+    expect(p).toMatchObject({ platform: "pixiv", id: "44298467", author: "pixiv事務局", title: "うごイラはじめました" });
+    const it0 = p.items[0];
+    expect(it0).toMatchObject({ kind: "VIDEO", url: "https://i.pximg.net/img-zip-ugoira/x_ugoira1920x1080.zip", durationSec: 1.5 });
+    expect(it0.ugoira?.frames).toHaveLength(12);
+    expect(it0.variants?.map((v) => v.label)).toEqual(["MP4 · original (1920×1080)", "MP4 · 600px", "Original frames (ZIP)"]);
+    expect(it0.variants?.[2].raw).toBe(true);
+  });
+
+  it("lists every page of a multi-page work with size options", async () => {
+    const { parsePixiv } = await import("../src/lib/pixiv");
+    const page = (n: number) => ({ width: 2000, height: 3000, urls: { original: `https://i.pximg.net/img-original/p${n}.png`, regular: `https://i.pximg.net/img-master/p${n}.jpg`, small: `https://i.pximg.net/c/540x540_70/p${n}.jpg` } });
+    const p = parsePixiv({ illust: { illustId: "9", illustType: 1, pageCount: 3, userName: "artist" }, pages: [page(0), page(1), page(2)] }, "");
+    expect(p.items.map((i) => i.url)).toEqual([0, 1, 2].map((n) => `https://i.pximg.net/img-original/p${n}.png`));
+    expect(p.items[0].variants?.map((v) => v.label)).toEqual(["2000×3000 · original", "Large (1200px)", "Small (540px)"]);
+  });
+});
+
+describe("Snapchat", () => {
+  it("recognizes snapchat links", async () => {
+    const { parseSnapchatUrl } = await import("../src/lib/snapchat");
+    expect(parseSnapchatUrl("https://www.snapchat.com/spotlight/ABC123")?.url).toBe("https://www.snapchat.com/spotlight/ABC123");
+    expect(parseSnapchatUrl("story.snapchat.com/s/someone")).not.toBeNull();
+    expect(parseSnapchatUrl("https://snapchat.com.evil.com/x")).toBeNull();
+  });
+
+  it("parses a public Spotlight page's video metadata", async () => {
+    const { parseSnapchat } = await import("../src/lib/snapchat");
+    const p = parseSnapchat({
+      url: "https://www.snapchat.com/@jemmacrawford14/spotlight/W7_EDlXWTBiXAEEni",
+      ld: [{ "@type": "BreadcrumbList" }, { "@type": "VideoObject", name: "Jemma&#x27;s Hair Styling Moment", contentUrl: "https://bolt-gcdn.sc-cdn.net/y/abc.27.IRZXSOY?mo=1", thumbnailUrl: "https://bolt-gcdn.sc-cdn.net/y/abc.256.IRZXSOY?mo=2", uploadDate: "2026-05-25T01:32:02.935Z" }],
+      og: { "video:width": "540", "video:height": "960" },
+      next: null,
+    }, "");
+    expect(p).toMatchObject({ platform: "snapchat", author: "jemmacrawford14", title: "Jemma's Hair Styling Moment", takenAt: "2026-05-25T01:32:02.935Z", id: "W7_EDlXWTBiXAEEni" });
+    expect(p.items[0]).toMatchObject({ kind: "VIDEO", url: "https://bolt-gcdn.sc-cdn.net/y/abc.27.IRZXSOY?mo=1", width: 540, height: 960 });
+  });
+
+  it("parses public Story snaps and explains private pages", async () => {
+    const { parseSnapchat } = await import("../src/lib/snapchat");
+    const p = parseSnapchat({ url: "https://www.snapchat.com/add/someone", ld: [], og: {}, next: { story: { snapList: [{ snapMediaType: 1, snapUrls: { mediaUrl: "https://cf-st.sc-cdn.net/d/1.mp4", mediaPreviewUrl: { value: "https://cf-st.sc-cdn.net/d/1.jpg" } } }, { snapMediaType: 0, snapUrls: { mediaUrl: "https://cf-st.sc-cdn.net/d/2.jpg" } }] } } }, "");
+    expect(p.items.map((i) => i.kind)).toEqual(["VIDEO", "IMAGE"]);
+    expect(() => parseSnapchat({ ld: [], og: {} }, "")).toThrow(/public Spotlight/);
+  });
+});
+
+describe("Pixiv via the bookmark", () => {
+  it("reads the work with the page's own access and parses an ugoira", async () => {
+    const calls: string[] = [];
+    let posted: Record<string, unknown> | null = null;
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const win = { postMessage: (m: Record<string, unknown>) => (posted = m) };
+    g.location = { hostname: "www.pixiv.net", pathname: "/en/artworks/44298467", href: "https://www.pixiv.net/en/artworks/44298467" };
+    g.document = { cookie: "", querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} } };
+    g.window = { open: () => win, addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
+    g.fetch = async (u: string) => {
+      calls.push(u);
+      const body = u.endsWith("/ugoira_meta")
+        ? { originalSrc: "https://i.pximg.net/img-zip-ugoira/o.zip", src: "https://i.pximg.net/img-zip-ugoira/s.zip", frames: [{ file: "0.jpg", delay: 100 }] }
+        : { illustId: "44298467", illustType: 2, pageCount: 1, width: 1920, height: 1080, userName: "pixiv", urls: { regular: "https://i.pximg.net/r.jpg" } };
+      return new Response(JSON.stringify({ error: false, body }));
+    };
+    try {
+      await new Function(bookmarkletSource("https://entity-44.github.io/downloader/"))();
+      await new Promise((r) => setTimeout(r, 10));
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(calls).toEqual(["/ajax/illust/44298467", "/ajax/illust/44298467/ugoira_meta"]);
+    const { parseCollected } = await import("../src/lib/incoming");
+    const p = parseCollected(posted as never);
+    expect(p).toMatchObject({ platform: "pixiv", id: "44298467" });
+    expect(p.items[0].ugoira?.frames).toHaveLength(1);
+  });
+
+  it("accepts messages from pixiv.net", async () => {
+    const { TRUSTED_ORIGINS } = await import("../src/lib/bridge");
+    expect(TRUSTED_ORIGINS.has("https://www.pixiv.net")).toBe(true);
   });
 });

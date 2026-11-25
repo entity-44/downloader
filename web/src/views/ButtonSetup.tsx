@@ -19,7 +19,7 @@ export function ButtonSetup() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="One-click button" description="A bookmark that saves the Instagram or Reddit post you’re looking at. It reads only that post, using what your browser can already see, and sends it straight to this page." />
+      <PageHeader title="One-click button" description="A bookmark that saves the Instagram, Reddit or Pixiv post you’re looking at. It reads only that post, using what your browser can already see, and sends it straight to this page." />
 
       <Card>
         <div className="flex flex-col items-center gap-4 py-4 text-center">

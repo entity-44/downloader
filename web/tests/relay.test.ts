@@ -100,3 +100,30 @@ describe("relay lookups", () => {
     expect(((f.mock.calls[1] as unknown[])[1] as { headers: Record<string, string> }).headers.Referer).toBeUndefined();
   });
 });
+
+describe("relay: Pixiv and Snapchat", () => {
+  it("/pixiv accepts only numeric ids and adds ugoira data", async () => {
+    const f = vi.fn(async (u: string) => new Response(JSON.stringify({ error: false, body: String(u).endsWith("/ugoira_meta") ? { frames: [{ file: "0.jpg", delay: 100 }] } : { illustType: 2, pageCount: 1 } })));
+    vi.stubGlobal("fetch", f);
+    expect((await call("/pixiv?id=abc")).status).toBe(400);
+    const r = await call("/pixiv?id=44298467");
+    expect(r.status).toBe(200);
+    expect((await r.json()).ugoira.frames).toHaveLength(1);
+    expect(((f.mock.calls[0] as unknown[])[1] as { headers: Record<string, string> }).headers.Referer).toBe("https://www.pixiv.net/");
+  });
+
+  it("/snapchat only fetches snapchat.com and extracts link-preview metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(`<html><head><meta property="og:video:width" content="540"/><script type="application/ld+json">{"@type":"VideoObject","contentUrl":"https://bolt-gcdn.sc-cdn.net/y/a.mp4"}</script></head></html>`, { headers: { "content-type": "text/html" } })));
+    expect((await call("/snapchat?url=" + encodeURIComponent("https://evil.com/x"))).status).toBe(400);
+    expect((await call("/snapchat?url=" + encodeURIComponent("http://www.snapchat.com/x"))).status).toBe(400);
+    const r = await call("/snapchat?url=" + encodeURIComponent("https://www.snapchat.com/spotlight/ABC"));
+    const j = await r.json();
+    expect(j.ld[0].contentUrl).toBe("https://bolt-gcdn.sc-cdn.net/y/a.mp4");
+    expect(j.og["video:width"]).toBe("540");
+  });
+
+  it("relays Pixiv ugoira ZIPs", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { headers: { "content-type": "application/zip" } })));
+    expect((await call(media("https://i.pximg.net/img-zip-ugoira/img/x_ugoira600x600.zip"))).status).toBe(200);
+  });
+});

@@ -1,3 +1,4 @@
+import { compactJs } from "./compact";
 /**
  * Code that runs on the Instagram/Reddit post you are viewing, in your own
  * signed-in browser. It reads only that post (preferring data already on the
@@ -89,14 +90,21 @@ const COLLECT = `
       const r = await fetch("/comments/" + m[1] + ".json?raw_json=1&limit=1", { credentials: "include" });
       if (!r.ok) throw new Error("Reddit returned " + r.status + ".");
       msg = { type: "keepsake:post", platform: "reddit", url: location.href, raw: await r.json() };
+    } else if (/(^|\\.)pixiv\\.net$/.test(h)) {
+      const m = p.match(/\\/(?:artworks|i)\\/(\\d+)/);
+      if (!m) throw new Error("Open a Pixiv work first.");
+      toast("Reading work…");
+      const g = async (s) => { const r = await fetch("/ajax/illust/" + m[1] + s, { credentials: "include" }); const j = await r.json(); if (j.error) throw new Error(j.message || "Pixiv refused the request."); return j.body; };
+      const illust = await g("");
+      msg = { type: "keepsake:post", platform: "pixiv", url: location.href, raw: { illust: illust, ugoira: illust.illustType === 2 ? await g("/ugoira_meta") : null, pages: illust.pageCount > 1 ? await g("/pages") : null } };
     } else {
-      throw new Error("Use this button on an Instagram or Reddit post.");
+      throw new Error("Use this button on an Instagram, Reddit or Pixiv page.");
     }
     return msg;
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 17;
+export const CODE_VERSION = 18;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
@@ -104,7 +112,7 @@ export function bookmarkletSource(appUrl: string): string {
   const app = new URL(appUrl);
   const APP = JSON.stringify(app.origin + app.pathname);
   const ORIGIN = JSON.stringify(app.origin);
-  return oneLine(`
+  return compactJs(oneLine(`
 (async () => {
   const APP = ${APP}, ORIGIN = ${ORIGIN};
   ${TOAST}
@@ -122,7 +130,7 @@ export function bookmarkletSource(appUrl: string): string {
   } catch (err) {
     toast("Keepsake: " + (err && err.message || err));
   }
-})();`);
+})();`));
 }
 
 /**
@@ -172,7 +180,7 @@ export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/
   // No "#": the Shortcuts "Open URLs" action percent-encodes it, which breaks the address.
   const PASTE = JSON.stringify(app.origin + app.pathname + "?paste=");
   // Leading ";" keeps a leftover sample line without a semicolon from swallowing our code.
-  return ";" + oneLine(`
+  return ";" + compactJs(oneLine(`
 (async () => {
   ${TOAST}
   ${COLLECT}
@@ -188,5 +196,5 @@ export function shortcutSource(appUrl = "https://entity-44.github.io/downloader/
     send({ error: "Keepsake script error: " + String(err && err.message || err) });
   }
   clearTimeout(guard);
-})();`);
+})();`));
 }

@@ -10,11 +10,13 @@
  * It can also look up public post data from two public sources, by ID only:
  *  - /tweet?id=   X's public embed data (cdn.syndication.twimg.com, used by embedded tweets)
  *  - /redgifs?id= RedGIFs' public API (anonymous temporary token, as their site uses)
+ *  - /pixiv?id=   Pixiv's public work data (logged out; adults-only works are refused by Pixiv)
+ *  - /snapchat?url= a public Snapchat page's link-preview metadata (JSON-LD / Open Graph)
  * It never calls Instagram's private API.
  */
 const ALLOWED_ORIGINS = new Set(["https://entity-44.github.io", "http://localhost:5173", "http://localhost:4173"]);
-const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net)$/i;
-const OK_TYPES = /^(image|video|audio)\/|dash\+xml|octet-stream|binary/i;
+const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net)$/i;
+const OK_TYPES = /^(image|video|audio)\/|dash\+xml|octet-stream|binary|application\/zip/i;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 
 function allowedTarget(raw) {
@@ -83,6 +85,62 @@ async function redgifs(id, cors) {
   return json(200, await r.json(), cors);
 }
 
+async function pixiv(id, cors) {
+  if (!/^\d{1,12}$/.test(id)) return text(400, "Invalid Pixiv id.", cors);
+  const get = async (p) => {
+    const r = await fetch("https://www.pixiv.net/ajax/illust/" + id + p, { headers: { "User-Agent": UA, Accept: "application/json", Referer: "https://www.pixiv.net/" } });
+    const j = await r.json().catch(() => null);
+    return j && !j.error ? j.body : null;
+  };
+  const illust = await get("");
+  if (!illust) return json(404, { error: "not_found_or_login_required" }, cors);
+  const out = { illust, pages: null, ugoira: null };
+  if (illust.illustType === 2) out.ugoira = await get("/ugoira_meta");
+  if ((illust.pageCount ?? 1) > 1) out.pages = await get("/pages");
+  return json(200, out, cors);
+}
+
+const SNAP_HOST = /^(?:www\.|story\.|t\.)?snapchat\.com$/i;
+async function snapchat(raw, cors) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return text(400, "Invalid Snapchat link.", cors);
+  }
+  if (u.protocol !== "https:" || !SNAP_HOST.test(u.hostname)) return text(400, "Only snapchat.com links are supported.", cors);
+  let r;
+  for (let hop = 0; hop < 4; hop++) {
+    r = await fetch(u.toString(), { redirect: "manual", headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" } });
+    const loc = r.headers.get("location");
+    if (r.status >= 300 && r.status < 400 && loc) {
+      u = new URL(loc, u);
+      if (!SNAP_HOST.test(u.hostname)) return text(502, "Snapchat redirected somewhere unexpected.", cors);
+      continue;
+    }
+    break;
+  }
+  if (r.status === 404) return json(404, { error: "not_found" }, cors);
+  if (!r.ok) return json(502, { error: "upstream", status: r.status }, cors);
+  const html = (await r.text()).slice(0, 3_000_000);
+  const ld = [];
+  for (const m of html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      ld.push(JSON.parse(m[1]));
+    } catch {}
+  }
+  const og = {};
+  for (const m of html.matchAll(/<meta[^>]+property="og:([a-z:_]+)"[^>]+content="([^"]*)"/gi)) og[m[1]] = m[2].replace(/&amp;/g, "&");
+  let next = null;
+  const nd = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (nd) {
+    try {
+      next = JSON.parse(nd[1])?.props?.pageProps ?? null;
+    } catch {}
+  }
+  return json(200, { url: u.toString(), ld, og, next }, cors);
+}
+
 const text = (status, body, headers = {}) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", ...headers } });
 
 export default {
@@ -97,10 +155,12 @@ export default {
     if (url.pathname === "/health") return text(200, "ok", cors);
     if (url.pathname === "/tweet") return tweet(url.searchParams.get("id") ?? "", cors);
     if (url.pathname === "/redgifs") return redgifs(url.searchParams.get("id") ?? "", cors);
+    if (url.pathname === "/pixiv") return pixiv(url.searchParams.get("id") ?? "", cors);
+    if (url.pathname === "/snapchat") return snapchat(url.searchParams.get("url") ?? "", cors);
     if (url.pathname !== "/media") return text(404, "Not found", cors);
 
     let target = allowedTarget(url.searchParams.get("u") ?? "");
-    if (!target) return text(400, "Only HTTPS media from supported file servers (Instagram, Reddit, X, RedGIFs, Pixiv) is allowed.", cors);
+    if (!target) return text(400, "Only HTTPS media from supported file servers (Instagram, Reddit, X, RedGIFs, Pixiv, Snapchat) is allowed.", cors);
 
     // Follow redirects manually so every hop stays on an allowed host.
     let upstream;

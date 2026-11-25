@@ -1,10 +1,10 @@
 import { RELAY_URL } from "./config";
-import { mergeAudioVideo } from "./merge";
+import { mergeAudioVideo, ugoiraToMp4 } from "./merge";
 import { parseDashManifest } from "./reddit";
 import { sniffBlob } from "./sniff";
 import { UserError, type MediaItem } from "./types";
 
-const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net)$/i;
+const ALLOWED = /(^|\.)(cdninstagram\.com|fbcdn\.net|redd\.it|redditmedia\.com|twimg\.com|redgifs\.com|pximg\.net|sc-cdn\.net)$/i;
 
 function assertAllowed(url: string) {
   const u = new URL(url);
@@ -40,8 +40,23 @@ export async function fetchFile(url: string, fetcher: typeof fetch = fetch): Pro
 export type Progress = (stage: string, fraction?: number) => void;
 
 /** Downloads one item, merging Reddit's separate audio track when present. */
-export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url, audioUrl?: string): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
+export async function downloadItem(item: MediaItem, onProgress?: Progress, url: string = item.url, audioUrl?: string, raw = false): Promise<{ blob: Blob; mergedAudio: boolean; note?: string }> {
   onProgress?.("Downloading");
+  // As-is download (e.g. a Pixiv ugoira's original frames ZIP).
+  if (raw) {
+    const b = await fetchFile(url);
+    return { blob: new Blob([b], { type: /\.zip(\?|$)/i.test(url) ? "application/zip" : b.type }), mergedAudio: false };
+  }
+  // Pixiv ugoira: download the frames ZIP and build an MP4 with each frame's timing.
+  if (item.ugoira) {
+    const zip = await fetchFile(url);
+    onProgress?.("Creating video", 0);
+    try {
+      return { blob: await ugoiraToMp4(zip, item.ugoira.frames, (p) => onProgress?.("Creating video", p)), mergedAudio: false };
+    } catch {
+      throw new UserError("Couldn't turn this animation into a video. Try “Original frames (ZIP)” instead.");
+    }
+  }
   const video = await fetchFile(url);
   const sn = await sniffBlob(video);
   if (!sn) throw new UserError("The downloaded file isn't a supported image or video.");

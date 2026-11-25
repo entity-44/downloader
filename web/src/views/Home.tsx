@@ -55,7 +55,7 @@ export function Home() {
     <div className="space-y-10">
       <section className="mx-auto max-w-3xl pt-2 text-center sm:pt-8">
         <h1 className="animate-fade-up text-3xl font-semibold tracking-tight sm:text-5xl">
-          Save Instagram, Reddit, X & RedGIFs media.
+          Save media from the sites you use.
           <span className="block bg-clip-text text-transparent brand-gradient">Privately, in your browser.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl animate-fade-up text-muted [animation-delay:60ms] sm:text-lg">
@@ -69,7 +69,7 @@ export function Home() {
                 ref={inputRef}
                 aria-label="Post link"
                 className="h-12 w-full select-text rounded-xl bg-transparent pl-11 pr-24 text-base outline-none placeholder:text-[var(--muted)] sm:h-14"
-                placeholder="Paste an Instagram, Reddit, X or RedGIFs link…"
+                placeholder="Paste a link: Instagram, Reddit, X, RedGIFs, Pixiv, Snapchat…"
                 type="text"
                 inputMode="url"
                 autoComplete="off"
@@ -139,6 +139,8 @@ export function Home() {
             ["v.redd.it video links", "Paste directly"],
             ["X (Twitter) photos, videos & GIFs", "Paste a public post link"],
             ["RedGIFs videos (HD & SD)", "Paste a link"],
+            ["Pixiv illustrations, manga pages & ugoira (as MP4)", "Bookmark or Shortcut on pixiv.net"],
+            ["Snapchat public Spotlight & Stories", "Paste a link"],
             ["Your entire Instagram history", "Data export import"],
           ].map(([a, b]) => (
             <li key={a} className="flex items-start gap-3">

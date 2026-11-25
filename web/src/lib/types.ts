@@ -14,13 +14,15 @@ export type MediaItem = {
   variants?: Variant[];
   /** Cover/thumbnail image sizes for videos, largest first. */
   thumbVariants?: Variant[];
+  /** Pixiv ugoira: url points to a ZIP of frames, converted to MP4 on download. */
+  ugoira?: { frames: Array<{ file: string; delay: number }> };
 };
 
 /** A downloadable size. audioUrl: separate audio stream to merge (DASH video-only tracks). */
-export type Variant = { url: string; width?: number; height?: number; audioUrl?: string };
+export type Variant = { url: string; width?: number; height?: number; audioUrl?: string; /** Display text (overrides the size). */ label?: string; /** Download the file as-is (e.g. ugoira frames ZIP). */ raw?: boolean };
 
 export type Post = {
-  platform: "instagram" | "reddit" | "x" | "redgifs";
+  platform: "instagram" | "reddit" | "x" | "redgifs" | "pixiv" | "snapchat";
   id: string;
   url: string;
   author?: string;
