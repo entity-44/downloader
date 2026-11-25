@@ -1,13 +1,2 @@
-node_modules/
-.next/
-out/
-data/
-.env
-.env.local
-*.db
-*.db-journal
-src/generated/
-next-env.d.ts
-*.tsbuildinfo
-coverage/
 .DS_Store
+*.log
