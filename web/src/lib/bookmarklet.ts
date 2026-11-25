@@ -121,7 +121,8 @@ export function bookmarkletHref(appUrl: string) {
 
 /** Code for the iOS Shortcut "Run JavaScript on Web Page" action. */
 export function shortcutSource(): string {
-  return oneLine(`
+  // Leading ";" keeps a leftover sample line without a semicolon from swallowing our code.
+  return ";" + oneLine(`
 (async () => {
   ${TOAST}
   ${COLLECT}

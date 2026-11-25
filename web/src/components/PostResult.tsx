@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { downloadItem } from "../lib/fetchmedia";
 import { formatDuration, postFilename, saveBlob } from "../lib/files";
 import { redditVideoVariants } from "../lib/reddit";
@@ -35,32 +35,40 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
   const [attested, setAttested] = useState(() => sessionStorage.getItem(ATTEST_KEY) === "1");
   const [states, setStates] = useState<Record<number, ItemState>>({});
   const [blobs] = useState(() => new Map<string, Blob>());
-  // Chosen size per item (defaults to the best / HD version) and lazily loaded Reddit sizes.
-  const [choice, setChoice] = useState<Record<number, string>>({});
+  // Extra sizes loaded on demand (Reddit resolutions).
   const [extra, setExtra] = useState<Record<number, Variant[]>>({});
   const optionsFor = (i: number): Variant[] => post.items[i].variants ?? extra[i] ?? [];
-  const urlFor = (i: number) => choice[i] ?? post.items[i].url;
-  const sizeTag = (i: number) => {
-    if (!choice[i] || choice[i] === post.items[i].url) return "";
-    const v = optionsFor(i).find((o) => o.url === choice[i]);
+  const sizeTag = (i: number, url: string) => {
+    if (url === post.items[i].url) return "";
+    const v = optionsFor(i).find((o) => o.url === url);
     return v?.width && v.height ? `_${v.width}x${v.height}` : v?.height ? `_${v.height}p` : "";
   };
+  // Reddit: load every resolution as soon as the post is shown.
+  useEffect(() => {
+    post.items.forEach((it, i) => {
+      if (it.dashUrl && !it.variants) {
+        redditVideoVariants(it.dashUrl)
+          .then((v) => v.length > 1 && setExtra((x) => ({ ...x, [i]: v })))
+          .catch(() => {});
+      }
+    });
+  }, [post]);
   const [zipping, setZipping] = useState(false);
   const [readyFiles, setReadyFiles] = useState<Array<{ name: string; blob: Blob }> | null>(null);
   const zipName = `keepsake_${post.platform}_${post.author ? `${post.author}_` : ""}${post.id}.zip`;
   const [error, setError] = useState<string | null>(null);
 
   const ext = (b: Blob, item: MediaItem) => b.type.split("/")[1]?.replace("jpeg", "jpg").replace("quicktime", "mov") ?? (item.kind === "VIDEO" ? "mp4" : "jpg");
-  const name = (i: number, b: Blob) => postFilename({ platform: post.platform, author: post.author, id: post.id, takenAt: post.takenAt, index: i, total: post.items.length, ext: ext(b, post.items[i]) }).replace(/(\.[^.]+)$/, `${sizeTag(i)}$1`);
+  const name = (i: number, b: Blob, url: string = post.items[i].url) => postFilename({ platform: post.platform, author: post.author, id: post.id, takenAt: post.takenAt, index: i, total: post.items.length, ext: ext(b, post.items[i]) }).replace(/(\.[^.]+)$/, `${sizeTag(i, url)}$1`);
   const set = (i: number, s: ItemState) => setStates((prev) => ({ ...prev, [i]: s }));
 
-  async function get(i: number): Promise<Blob> {
-    const key = `${i}|${urlFor(i)}`;
+  async function get(i: number, url: string = post.items[i].url): Promise<Blob> {
+    const key = `${i}|${url}`;
     const cached = blobs.get(key);
     if (cached) return cached;
     set(i, { status: "busy", stage: "Downloading" });
     try {
-      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }), urlFor(i));
+      const r = await downloadItem(post.items[i], (stage, p) => set(i, { status: "busy", stage, progress: p }), url);
       blobs.set(key, r.blob);
       set(i, { status: "done", note: r.note });
       return r.blob;
@@ -70,13 +78,13 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
     }
   }
 
-  async function downloadOne(i: number) {
+  async function downloadOne(i: number, url: string = post.items[i].url) {
     try {
-      const b = await get(i);
+      const b = await get(i, url);
       // Phones: the share sheet ("Save Image/Video" → Photos) needs a fresh tap,
       // so prepare the file here and show Save buttons for the next tap.
-      if (phone) setReadyFiles([{ name: name(i, b), blob: b }]);
-      else saveBlob(b, name(i, b));
+      if (phone) setReadyFiles([{ name: name(i, b, url), blob: b }]);
+      else saveBlob(b, name(i, b, url));
     } catch {
       /* shown on the item */
     }
@@ -113,36 +121,28 @@ export function PostResult({ post, onReset, resetLabel = "Start over" }: { post:
 
   const label = (o: Variant) => (o.width && o.height ? `${o.width}×${o.height}` : o.height ? `${o.height}p` : "Original");
   const quality = (i: number) => {
-    const it = post.items[i];
     const opts = optionsFor(i);
-    if (opts.length > 1) {
-      return (
-        <div className="px-2 pt-2">
-          <select aria-label="Quality" className="input h-8 py-0 text-xs" value={urlFor(i)} onChange={(e) => setChoice((c) => ({ ...c, [i]: e.target.value }))}>
-            {opts.map((o, k) => (
-              <option key={o.url} value={o.url}>{label(o)}{k === 0 ? " · HD (best)" : ""}</option>
-            ))}
-          </select>
-        </div>
-      );
-    }
-    if (it.dashUrl && !extra[i]) {
-      return (
-        <div className="px-2 pt-2">
+    if (opts.length < 2) return null;
+    const busyItem = states[i]?.status === "busy";
+    return (
+      <div className="space-y-1.5 p-2">
+        <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted">Download quality</p>
+        {opts.map((o, k) => (
           <button
-            className="text-xs text-muted underline-offset-4 hover:underline"
-            onClick={async () => {
-              const v = await redditVideoVariants(it.dashUrl!).catch(() => []);
-              setExtra((x) => ({ ...x, [i]: v.length ? v : [{ url: it.url, height: it.height }] }));
-              if (v.length) setChoice((c) => ({ ...c, [i]: v[0].url }));
-            }}
+            key={o.url}
+            disabled={!attested || busyItem}
+            onClick={() => downloadOne(i, o.url)}
+            className={cn(
+              "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition disabled:opacity-40",
+              k === 0 ? "brand-gradient text-white" : "border border-default hover:bg-[var(--surface-2)]",
+            )}
           >
-            Other qualities…
+            <span>{label(o)}{k === 0 ? " · HD" : ""}</span>
+            <IconDownload className="size-4 shrink-0" />
           </button>
-        </div>
-      );
-    }
-    return null;
+        ))}
+      </div>
+    );
   };
 
   const busy = zipping || Object.values(states).some((s) => s.status === "busy");
