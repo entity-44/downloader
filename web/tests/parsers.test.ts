@@ -279,7 +279,7 @@ describe("bookmarklet page detection", () => {
 
   it("reads full-size profile pictures on profile pages", async () => {
     const r = await run("/someone/", { web_profile_info: { data: { user: { id: "42" } } }, "/users/42/info/": { user: {} } });
-    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/feed/user/someone/username/?count=12", "/api/v1/users/42/info/", "/api/v1/feed/reels_media/?reel_ids=42", "/api/v1/highlights/42/highlights_tray/"]);
+    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/users/42/info/", "/api/v1/feed/reels_media/?reel_ids=42", "/api/v1/highlights/42/highlights_tray/"]);
   });
 
   it("refuses non-content pages", async () => {
@@ -1017,7 +1017,6 @@ describe("Instagram profile overview", () => {
     }
     expect(calls).toEqual([
       "/api/v1/users/web_profile_info/?username=someone",
-      "/api/v1/feed/user/someone/username/?count=12",
       "/api/v1/users/42/info/",
       "/api/v1/feed/reels_media/?reel_ids=42",
       "/api/v1/highlights/42/highlights_tray/",
@@ -1126,7 +1125,53 @@ describe("profile lookup returns 404 (the reported error)", () => {
       ["Profile picture", `${CDN}/pfp.jpg`],
       ["Stories", `${CDN}/s1.jpg`],
       ["Highlight: Trip", `${CDN}/h1.jpg`],
-      ["Posts", `${CDN}/p1.jpg`],
     ]);
+    expect(calls.some((x) => x.u.includes("web_profile_info") || x.u.includes("/feed/user/"))).toBe(false); // id was on the page
+  });
+});
+
+describe("profile when Instagram rate-limits (the reported 429)", () => {
+  it("stops at the 429 and shows what was on screen", async () => {
+    const calls: string[] = [];
+    let posted: Record<string, unknown> | null = null;
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const win = { postMessage: (m: Record<string, unknown>) => (posted = m) };
+    const img = (alt: string, srcset: string) => ({ alt, src: "x", getAttribute: (k: string) => (k === "srcset" ? srcset : null) });
+    const link = (href: string, im: unknown, text = "") => ({ getAttribute: () => href, querySelector: () => im, textContent: text });
+    g.location = { hostname: "www.instagram.com", pathname: "/someone/", href: "https://www.instagram.com/someone/" };
+    g.document = {
+      cookie: "",
+      images: [img("me's profile picture", `${CDN}/me.jpg 150w`), img("someone's profile picture", `${CDN}/pfp150.jpg 150w, ${CDN}/pfp320.jpg 320w`)],
+      querySelectorAll: (sel: string) =>
+        sel.startsWith("script") ? [] :
+        sel.includes("/p/") ? [link("/someone/p/AAA111/", img("", `${CDN}/g1-320.jpg 320w, ${CDN}/g1-640.jpg 640w`)), link("/reel/BBB222/", img("", `${CDN}/g2.jpg 640w`))] :
+        sel.includes("highlights") ? [link("/stories/highlights/1/", null, "Trip"), link("/stories/highlights/2/", null, "Food")] : [],
+      getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} },
+      documentElement: { innerHTML: '"profilePage_53043200705"', outerHTML: "" },
+    };
+    g.window = { open: () => win, addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
+    g.fetch = async (u: string) => { calls.push(u); return new Response("{}", { status: 429 }); };
+    try {
+      await new Function(bookmarkletSource("https://entity-44.github.io/downloader/"))();
+      await new Promise((r) => setTimeout(r, 10));
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(calls).toEqual(["/api/v1/users/53043200705/info/"]); // nothing more after the 429
+    expect((posted as Record<string, unknown> | null)?.error).toBeUndefined();
+    const { parseCollected } = await import("../src/lib/incoming");
+    const p = parseCollected(posted as never);
+    expect(p.items.map((i) => [i.group, i.url])).toEqual([
+      ["Profile picture", `${CDN}/pfp320.jpg`],
+      ["Posts (grid previews)", `${CDN}/g1-640.jpg`],
+      ["Posts (grid previews)", `${CDN}/g2.jpg`],
+    ]);
+    const notes = p.notes?.join(" ") ?? "";
+    expect(notes).toMatch(/limiting requests .*429.*Wait at least an hour/);
+    expect(notes).toMatch(/Highlights on this profile: Trip, Food/);
   });
 });

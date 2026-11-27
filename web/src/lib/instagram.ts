@@ -260,7 +260,7 @@ type ProfileRaw = {
 /** Picks the largest available profile picture (usually 1080px). */
 export function parseInstagramProfile(raw: unknown, username: string, sourceUrl: string): Post {
   type PageUser = { username?: string; full_name?: string; profile_pic_url?: string; profile_pic_url_hd?: string; hd_profile_pic_url_info?: Candidate; hd_profile_pic_versions?: Candidate[] };
-  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null; page?: { user?: PageUser | null; items?: string[] }; fails?: string[]; feed?: { items?: V1Item[]; user?: PageUser } | null };
+  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null; page?: { user?: PageUser | null; items?: string[] }; fails?: string[]; feed?: { items?: V1Item[]; user?: PageUser } | null; limited?: boolean; dom?: { pic?: { u: string; w: number } | null; posts?: Array<{ u: string; w: number; code: string }>; highlights?: string[] } };
   const pu = r?.page?.user ?? r?.feed?.user ?? undefined;
   const info = r?.info?.user;
   const prof = r?.profile?.data?.user as (NonNullable<ProfileRaw["profile"]>["data"] & { user?: { edge_owner_to_timeline_media?: { edges?: Array<{ node: GqlNode }> } } })["user"];
@@ -335,8 +335,17 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
       items.push({ ...m, group: "Posts" });
     }
   }
+  // What was on screen (no requests): used when Instagram refused the requests.
+  const dm = r?.dom;
+  const https = (u?: string) => typeof u === "string" && /^https:\/\//.test(u);
+  if (https(dm?.pic?.u) && !items.some((i) => i.group === "Profile picture")) items.unshift({ kind: "IMAGE", url: dm!.pic!.u, width: dm!.pic!.w || undefined, group: "Profile picture" });
+  const gridOnly = !items.some((i) => i.group === "Posts");
+  if (gridOnly) for (const p of dm?.posts ?? []) if (https(p.u)) items.push({ kind: "IMAGE", url: p.u, width: p.w || undefined, group: "Posts (grid previews)" });
   if (!items.length) throw new UserError("Couldn't find anything to save on this profile." + (r?.fails?.length ? ` Instagram said: ${r.fails.join("; ")}` : ""));
   const notes: string[] = [];
+  if (r?.limited) notes.push("Instagram is limiting requests for your account right now (429), so only what was on screen is shown. Wait at least an hour before trying again, so it doesn't flag the account.");
+  if (gridOnly && dm?.posts?.length) notes.push("Post images are the profile grid's previews (may be cropped). For full quality, open a post and use the button there.");
+  if (!items.some((i) => i.group?.startsWith("Highlight")) && dm?.highlights?.length) notes.push(`Highlights on this profile: ${dm.highlights.join(", ")}. Open one and use the button to save it.`);
   const missing = [!items.some((i) => i.group === "Stories") && r?.stories === null ? "stories" : "", r?.tray === null ? "highlights" : ""].filter(Boolean);
   if (missing.length && r?.fails?.length) notes.push(`Couldn't load ${missing.join(" and ")}. Instagram said: ${r.fails.join("; ")}`);
   if (videoWithoutFile) notes.push(`${videoWithoutFile} post video(s) weren't included in the profile data. Open those posts to save them.`);
