@@ -691,8 +691,8 @@ describe("bookmark link is plain ASCII", () => {
     const href = bookmarkletHref("https://entity-44.github.io/downloader/");
     expect(/^[\x20-\x7e]+$/.test(href)).toBe(true);
     expect(decodeURIComponent(href.slice(11))).toBe(bookmarkletSource("https://entity-44.github.io/downloader/"));
-    // 9k is confirmed on iPhone; 12k+ pending the size tests on the Button page.
-    expect(href.length).toBeLessThan(12000);
+    // 24k is confirmed to work in iPhone Safari bookmarks (size tests on the Button page).
+    expect(href.length).toBeLessThan(24000);
   });
 });
 
