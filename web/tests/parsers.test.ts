@@ -279,7 +279,7 @@ describe("bookmarklet page detection", () => {
 
   it("reads full-size profile pictures on profile pages", async () => {
     const r = await run("/someone/", { web_profile_info: { data: { user: { id: "42" } } }, "/users/42/info/": { user: {} } });
-    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/users/42/info/", "/api/v1/feed/reels_media/?reel_ids=42", "/api/v1/highlights/42/highlights_tray/"]);
+    expect(r.calls).toEqual(["/api/v1/users/web_profile_info/?username=someone", "/api/v1/feed/user/someone/username/?count=12", "/api/v1/users/42/info/", "/api/v1/feed/reels_media/?reel_ids=42", "/api/v1/highlights/42/highlights_tray/"]);
   });
 
   it("refuses non-content pages", async () => {
@@ -1017,6 +1017,7 @@ describe("Instagram profile overview", () => {
     }
     expect(calls).toEqual([
       "/api/v1/users/web_profile_info/?username=someone",
+      "/api/v1/feed/user/someone/username/?count=12",
       "/api/v1/users/42/info/",
       "/api/v1/feed/reels_media/?reel_ids=42",
       "/api/v1/highlights/42/highlights_tray/",
@@ -1083,5 +1084,49 @@ describe("profile overview when Instagram refuses the requests (phone case)", ()
     const { posted, toast } = await runProfile([]);
     expect(String(posted?.error)).toMatch(/Couldn't read this profile \(.*web_profile_info 400 useragent mismatch/);
     expect(toast).toMatch(/useragent mismatch/);
+  });
+});
+
+describe("profile lookup returns 404 (the reported error)", () => {
+  it("finds the account id in the page, uses the page's app id, and still loads everything", async () => {
+    const calls: Array<{ u: string; app: string }> = [];
+    let posted: Record<string, unknown> | null = null;
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const win = { postMessage: (m: Record<string, unknown>) => (posted = m) };
+    const img = (u: string) => ({ pk: u, code: u.toUpperCase() + "0000", user: { username: "someone" }, image_versions2: { candidates: [{ url: `${CDN}/${u}.jpg`, width: 1080 }] } });
+    g.location = { hostname: "www.instagram.com", pathname: "/someone/", href: "https://www.instagram.com/someone/" };
+    g.document = { cookie: "", querySelectorAll: () => [], getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} },
+      documentElement: { innerHTML: '<script>{"APP_ID":"1217981644879628"}</script><meta content="profilePage_42">', outerHTML: "" } };
+    g.window = { open: () => win, addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
+    g.fetch = async (u: string, init?: { headers?: Record<string, string> }) => {
+      calls.push({ u, app: init?.headers?.["x-ig-app-id"] ?? "" });
+      if (u.includes("web_profile_info")) return new Response("{}", { status: 404 });
+      if (u.includes("/feed/user/")) return new Response(JSON.stringify({ items: [img("p1")], user: { pk: "42", username: "someone" } }));
+      if (u.includes("/users/42/info/")) return new Response(JSON.stringify({ user: { username: "someone", hd_profile_pic_url_info: { url: `${CDN}/pfp.jpg`, width: 1080, height: 1080 } } }));
+      if (u.includes("highlights_tray")) return new Response(JSON.stringify({ tray: [{ id: "highlight:7", title: "Trip" }] }));
+      if (u.includes("reel_ids=42")) return new Response(JSON.stringify({ reels: { "42": { items: [img("s1")] } } }));
+      if (u.includes("highlight%3A7")) return new Response(JSON.stringify({ reels: { "highlight:7": { id: "highlight:7", title: "Trip", items: [img("h1")] } } }));
+      return new Response("{}", { status: 404 });
+    };
+    try {
+      await new Function(bookmarkletSource("https://entity-44.github.io/downloader/"))();
+      await new Promise((r) => setTimeout(r, 10));
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
+    } finally {
+      Object.assign(g, saved);
+    }
+    expect(calls.every((c) => c.app === "1217981644879628")).toBe(true); // the page's own app id
+    expect((posted as Record<string, unknown> | null)?.error).toBeUndefined();
+    const { parseCollected } = await import("../src/lib/incoming");
+    const p = parseCollected(posted as never);
+    expect(p.items.map((i) => [i.group, i.url])).toEqual([
+      ["Profile picture", `${CDN}/pfp.jpg`],
+      ["Stories", `${CDN}/s1.jpg`],
+      ["Highlight: Trip", `${CDN}/h1.jpg`],
+      ["Posts", `${CDN}/p1.jpg`],
+    ]);
   });
 });

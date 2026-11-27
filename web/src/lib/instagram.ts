@@ -260,8 +260,8 @@ type ProfileRaw = {
 /** Picks the largest available profile picture (usually 1080px). */
 export function parseInstagramProfile(raw: unknown, username: string, sourceUrl: string): Post {
   type PageUser = { username?: string; full_name?: string; profile_pic_url?: string; profile_pic_url_hd?: string; hd_profile_pic_url_info?: Candidate; hd_profile_pic_versions?: Candidate[] };
-  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null; page?: { user?: PageUser | null; items?: string[] }; fails?: string[] };
-  const pu = r?.page?.user ?? undefined;
+  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null; page?: { user?: PageUser | null; items?: string[] }; fails?: string[]; feed?: { items?: V1Item[]; user?: PageUser } | null };
+  const pu = r?.page?.user ?? r?.feed?.user ?? undefined;
   const info = r?.info?.user;
   const prof = r?.profile?.data?.user as (NonNullable<ProfileRaw["profile"]>["data"] & { user?: { edge_owner_to_timeline_media?: { edges?: Array<{ node: GqlNode }> } } })["user"];
   const candidates: Candidate[] = [
@@ -312,8 +312,15 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
       if (m) items.push({ ...m, group: "Posts" });
     }
   }
-  // Posts already on the page (used when the profile request was refused, or to add to it).
+  // Posts from the profile-grid request, then posts already on the page.
   const seen = new Set(items.map((i) => i.url));
+  for (const it of r?.feed?.items ?? []) {
+    for (const m of fromV1(it, sourceUrl).items) {
+      if (seen.has(m.url)) continue;
+      seen.add(m.url);
+      items.push({ ...m, group: "Posts" });
+    }
+  }
   for (const b of r?.page?.items ?? []) {
     let o: unknown;
     try {

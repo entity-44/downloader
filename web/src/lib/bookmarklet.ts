@@ -21,7 +21,7 @@ const COLLECT = `
     let msg;
     if (/(^|\\.)instagram\\.com$/.test(h)) {
       const SPAM = "Instagram flagged that request as automated, so Keepsake stopped. Wait a while before trying again. Don't retry repeatedly.";
-      const hdrs = () => { const o = { "x-ig-app-id": "936619743392459", "x-requested-with": "XMLHttpRequest" }; const c = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1]; if (c) o["x-csrftoken"] = c; try { const w = sessionStorage.getItem("www-claim-v2"); if (w) o["x-ig-www-claim"] = w; } catch (e) {} return o; };
+      const HTML = document.documentElement.innerHTML || ""; const APPID = (HTML.match(/"(?:APP_ID|appId|X-IG-App-ID)"\\s*:\\s*"(\\d{6,})"/) || [])[1] || "936619743392459"; const hdrs = () => { const o = { "x-ig-app-id": APPID, "x-requested-with": "XMLHttpRequest" }; const c = (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1]; if (c) o["x-csrftoken"] = c; try { const w = sessionStorage.getItem("www-claim-v2"); if (w) o["x-ig-www-claim"] = w; } catch (e) {} return o; };
       const fails = []; const get = async (u) => { const tag = u.split("?")[0].split("/").filter(Boolean).slice(-2).join("/"); let j = null; try { const r = await fetch(u, { headers: hdrs(), credentials: "include" }); j = await r.json().catch(() => null); if (j && j.spam) throw new Error(SPAM); if (!r.ok || (j && j.status === "fail")) { fails.push(tag + " " + r.status + (j && j.message ? " " + j.message : "")); return null; } } catch (e) { if (e && e.message === SPAM) throw e; fails.push(tag + " network"); return null; } return j; };
       const onPageProfile = (name) => { const res = { user: null, items: [] }; const lc = name.toLowerCase(); const own = (o) => { const w = o.user || o.owner; return !!w && String(w.username || "").toLowerCase() === lc; }; const walk = (o, d) => { if (!o || typeof o !== "object" || d > 40 || res.items.length > 60) return; if (!Array.isArray(o) && String(o.username || "").toLowerCase() === lc && (o.hd_profile_pic_url_info || o.profile_pic_url || o.profile_pic_url_hd) && (!res.user || o.hd_profile_pic_url_info)) res.user = { pk: o.pk || o.id || o.pk_id, username: o.username, full_name: o.full_name, profile_pic_url: o.profile_pic_url, profile_pic_url_hd: o.profile_pic_url_hd, hd_profile_pic_url_info: o.hd_profile_pic_url_info, hd_profile_pic_versions: o.hd_profile_pic_versions }; if (!Array.isArray(o) && (o.image_versions2 || o.video_versions || o.carousel_media || o.display_url) && (o.code || o.shortcode) && own(o)) { res.items.push(JSON.stringify(o)); return; } for (const k in o) walk(o[k], d + 1); }; document.querySelectorAll('script[type="application/json"]').forEach((s) => { const t = s.textContent || ""; if (t.length > 2e7 || t.toLowerCase().indexOf('"' + lc + '"') < 0) return; try { walk(JSON.parse(t), 0); } catch (e) {} }); return res; };
       const onPage = (code) => {
@@ -77,9 +77,9 @@ const COLLECT = `
       } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0 && storyOpen()) {
         msg = await story("stories_" + seg[0], async () => { const u = await userId(seg[0]); return u.id ? get("/api/v1/feed/reels_media/?reel_ids=" + u.id) : null; }, undefined, seg[0]);
       } else if (seg.length && /^[\\w.]{1,30}$/.test(seg[0]) && RES.indexOf(seg[0].toLowerCase()) < 0) {
-        toast("Reading profile…"); const pg = onPageProfile(seg[0]); const u = await userId(seg[0]); const pid = u.id || (pg.user && pg.user.pk); const info = pid ? await get("/api/v1/users/" + pid + "/info/") : null; const stories = pid ? await get("/api/v1/feed/reels_media/?reel_ids=" + pid) : null; const tray = pid ? await get("/api/v1/highlights/" + pid + "/highlights_tray/") : null; const ids = ((tray && tray.tray) || []).slice(0, 30).map((t) => "reel_ids=" + encodeURIComponent(t.id)).join("&"); const hls = ids ? await get("/api/v1/feed/reels_media/?" + ids) : null;
-        if (!u.j && !info && !pg.user && !pg.items.length) throw new Error("Couldn't read this profile (" + (fails.join("; ") || "no data on the page") + "). If you're watching a story, let it start playing, then try again.");
-        msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info, stories: stories, tray: tray, highlights: hls, page: pg, fails: fails } });
+        toast("Reading profile…"); const pg = onPageProfile(seg[0]); let pid = pg.user && pg.user.pk; if (!pid) { const mm = HTML.match(/"profilePage_(\\d+)"|"profile_id":"(\\d+)"/); if (mm) pid = mm[1] || mm[2]; } const u = await userId(seg[0]); pid = pid || u.id; const feed = await get("/api/v1/feed/user/" + encodeURIComponent(seg[0]) + "/username/?count=12"); if (!pid && feed && feed.user) pid = feed.user.pk || feed.user.id; const info = pid ? await get("/api/v1/users/" + pid + "/info/") : null; const stories = pid ? await get("/api/v1/feed/reels_media/?reel_ids=" + pid) : null; const tray = pid ? await get("/api/v1/highlights/" + pid + "/highlights_tray/") : null; const ids = ((tray && tray.tray) || []).slice(0, 30).map((t) => "reel_ids=" + encodeURIComponent(t.id)).join("&"); const hls = ids ? await get("/api/v1/feed/reels_media/?" + ids) : null;
+        if (!u.j && !info && !pg.user && !pg.items.length && !(feed && feed.items && feed.items.length)) throw new Error("Couldn't read this profile (" + (fails.join("; ") || "no data on the page") + "). If you're watching a story, let it start playing, then try again.");
+        msg = Object.assign(base, { kind: "profile", username: seg[0], raw: { profile: u.j, info: info, feed: feed, stories: stories, tray: tray, highlights: hls, page: pg, fails: fails } });
       } else {
         throw new Error("Open a post, reel, story, highlight or profile first.");
       }
@@ -125,7 +125,7 @@ const COLLECT = `
   };`;
 
 /** Bump whenever the collector changes; the site warns when a saved bookmark/Shortcut is older. */
-export const CODE_VERSION = 21;
+export const CODE_VERSION = 22;
 
 const oneLine = (code: string) => code.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
 
