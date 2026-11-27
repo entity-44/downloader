@@ -259,7 +259,9 @@ type ProfileRaw = {
 
 /** Picks the largest available profile picture (usually 1080px). */
 export function parseInstagramProfile(raw: unknown, username: string, sourceUrl: string): Post {
-  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null };
+  type PageUser = { username?: string; full_name?: string; profile_pic_url?: string; profile_pic_url_hd?: string; hd_profile_pic_url_info?: Candidate; hd_profile_pic_versions?: Candidate[] };
+  const r = raw as ProfileRaw & { stories?: unknown; highlights?: unknown; tray?: { tray?: Array<{ id?: string; title?: string }> } | null; page?: { user?: PageUser | null; items?: string[] }; fails?: string[] };
+  const pu = r?.page?.user ?? undefined;
   const info = r?.info?.user;
   const prof = r?.profile?.data?.user as (NonNullable<ProfileRaw["profile"]>["data"] & { user?: { edge_owner_to_timeline_media?: { edges?: Array<{ node: GqlNode }> } } })["user"];
   const candidates: Candidate[] = [
@@ -267,9 +269,13 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
     ...(info?.hd_profile_pic_versions ?? []),
     ...(prof?.profile_pic_url_hd ? [{ url: prof.profile_pic_url_hd, width: 320 }] : []),
     ...(prof?.profile_pic_url ? [{ url: prof.profile_pic_url, width: 150 }] : []),
+    ...(pu?.hd_profile_pic_url_info?.url ? [pu.hd_profile_pic_url_info] : []),
+    ...(pu?.hd_profile_pic_versions ?? []),
+    ...(pu?.profile_pic_url_hd ? [{ url: pu.profile_pic_url_hd, width: 320 }] : []),
+    ...(pu?.profile_pic_url ? [{ url: pu.profile_pic_url, width: 150 }] : []),
   ];
   const pic = best(candidates);
-  const name = info?.username ?? prof?.username ?? username;
+  const name = info?.username ?? prof?.username ?? pu?.username ?? username;
   const items: MediaItem[] = [];
   if (pic) items.push({ kind: "IMAGE", url: pic.url, width: pic.width, height: pic.height, group: "Profile picture" });
 
@@ -306,8 +312,26 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
       if (m) items.push({ ...m, group: "Posts" });
     }
   }
-  if (!items.length) throw new UserError("Couldn't find anything to save on this profile.");
+  // Posts already on the page (used when the profile request was refused, or to add to it).
+  const seen = new Set(items.map((i) => i.url));
+  for (const b of r?.page?.items ?? []) {
+    let o: unknown;
+    try {
+      o = JSON.parse(b);
+    } catch {
+      continue;
+    }
+    const post = isV1Item(o) ? fromV1(o, sourceUrl) : isGql(o) ? fromGql(o) : null;
+    for (const m of post?.items ?? []) {
+      if (seen.has(m.url)) continue;
+      seen.add(m.url);
+      items.push({ ...m, group: "Posts" });
+    }
+  }
+  if (!items.length) throw new UserError("Couldn't find anything to save on this profile." + (r?.fails?.length ? ` Instagram said: ${r.fails.join("; ")}` : ""));
   const notes: string[] = [];
+  const missing = [!items.some((i) => i.group === "Stories") && r?.stories === null ? "stories" : "", r?.tray === null ? "highlights" : ""].filter(Boolean);
+  if (missing.length && r?.fails?.length) notes.push(`Couldn't load ${missing.join(" and ")}. Instagram said: ${r.fails.join("; ")}`);
   if (videoWithoutFile) notes.push(`${videoWithoutFile} post video(s) weren't included in the profile data. Open those posts to save them.`);
   if ((prof?.edge_owner_to_timeline_media?.edges?.length ?? 0) >= 12) notes.push("Shows the most recent posts. Open older posts individually to save them.");
   return {
@@ -315,7 +339,7 @@ export function parseInstagramProfile(raw: unknown, username: string, sourceUrl:
     id: `profile_${name}`,
     url: sourceUrl,
     author: name,
-    title: prof?.full_name ? `${prof.full_name} (@${name})` : `@${name}`,
+    title: (prof?.full_name ?? pu?.full_name) ? `${prof?.full_name ?? pu?.full_name} (@${name})` : `@${name}`,
     items,
     notes: notes.length ? notes : undefined,
   };

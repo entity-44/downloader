@@ -1040,3 +1040,48 @@ describe("TikTok", () => {
     await expect(resolveInput("https://www.tiktok.com/@a/video/123")).rejects.toBeInstanceOf(NeedsButton);
   });
 });
+
+describe("profile overview when Instagram refuses the requests (phone case)", () => {
+  async function runProfile(scripts: string[]) {
+    let posted: Record<string, unknown> | null = null;
+    let listener: ((e: unknown) => Promise<void>) | null = null;
+    const toastEl = { style: {}, remove() {}, textContent: "" };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { location: g.location, document: g.document, window: g.window, fetch: g.fetch };
+    const win = { postMessage: (m: Record<string, unknown>) => (posted = m) };
+    g.location = { hostname: "www.instagram.com", pathname: "/someone/", href: "https://www.instagram.com/someone/" };
+    g.document = { cookie: "", querySelectorAll: (sel: string) => (sel.startsWith("script") ? scripts.map((t) => ({ textContent: t })) : []), getElementById: () => toastEl, createElement: () => toastEl, body: { appendChild() {} }, documentElement: { outerHTML: "" } };
+    g.window = { open: () => win, addEventListener: (_: string, fn: (e: unknown) => Promise<void>) => (listener = fn) };
+    g.fetch = async () => new Response(JSON.stringify({ message: "useragent mismatch", status: "fail" }), { status: 400 });
+    try {
+      await new Function(bookmarkletSource("https://entity-44.github.io/downloader/"))();
+      await new Promise((r) => setTimeout(r, 10));
+      await (listener as ((e: unknown) => Promise<void>) | null)?.({ source: win, origin: "https://entity-44.github.io", data: { type: "keepsake:ready" } });
+    } finally {
+      Object.assign(g, saved);
+    }
+    return { posted: posted as Record<string, unknown> | null, toast: toastEl.textContent };
+  }
+
+  it("still gives the profile picture and posts from the page, and names what Instagram refused", async () => {
+    const page = JSON.stringify({ require: [{ user: { pk: "42", username: "someone", full_name: "Some One", hd_profile_pic_url_info: { url: `${CDN}/pfp.jpg`, width: 1080, height: 1080 } },
+      timeline: { edges: [
+        { node: { code: "AAA1111", user: { username: "someone" }, image_versions2: { candidates: [{ url: `${CDN}/a.jpg`, width: 1080 }] } } },
+        { node: { code: "BBB2222", user: { username: "someone" }, video_versions: [{ url: `${CDN}/b.mp4`, width: 720 }], image_versions2: { candidates: [{ url: `${CDN}/b.jpg`, width: 720 }] } } },
+        { node: { code: "CCC3333", user: { username: "someone_else" }, image_versions2: { candidates: [{ url: `${CDN}/not-mine.jpg`, width: 1080 }] } } },
+      ] } }] });
+    const { posted } = await runProfile([page]);
+    expect(posted?.error).toBeUndefined();
+    const { parseCollected } = await import("../src/lib/incoming");
+    const p = parseCollected(posted as never);
+    expect(p.items.map((i) => [i.group, i.url])).toEqual([["Profile picture", `${CDN}/pfp.jpg`], ["Posts", `${CDN}/a.jpg`], ["Posts", `${CDN}/b.mp4`]]);
+    expect(p.title).toBe("Some One (@someone)");
+    expect(p.notes?.join(" ")).toMatch(/Couldn't load stories and highlights\. Instagram said: .*400 useragent mismatch/);
+  });
+
+  it("explains exactly what failed when there's nothing to use", async () => {
+    const { posted, toast } = await runProfile([]);
+    expect(String(posted?.error)).toMatch(/Couldn't read this profile \(.*web_profile_info 400 useragent mismatch/);
+    expect(toast).toMatch(/useragent mismatch/);
+  });
+});
